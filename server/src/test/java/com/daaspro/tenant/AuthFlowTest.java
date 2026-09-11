@@ -42,7 +42,7 @@ class AuthFlowTest {
     @Test
     void registerLoginMeFlow() {
         String slug = "flowa" + System.currentTimeMillis();
-        var regReq = Map.of("name", "流程租户", "slug", slug,
+        var regReq = Map.of("name", "流程租户" + slug, "slug", slug,
                 "adminUsername", "admin", "adminPassword", "password123");
         var reg = rest().postForEntity(url("/api/tenant/register"), regReq, Map.class);
         assertThat(reg.getStatusCode().is2xxSuccessful()).isTrue();
@@ -66,7 +66,7 @@ class AuthFlowTest {
     @Test
     void wrongPasswordRejected() {
         String slug = "flowb" + System.currentTimeMillis();
-        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "流程租户B", "slug", slug,
+        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "流程租户B" + slug, "slug", slug,
                 "adminUsername", "admin", "adminPassword", "password123"), Map.class);
         var bad = rest().postForEntity(url("/api/auth/login"),
                 Map.of("tenantSlug", slug, "username", "admin", "password", "wrong-pass"), Map.class);
