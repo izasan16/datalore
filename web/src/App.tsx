@@ -1,19 +1,18 @@
-import { useEffect, useState } from 'react';
-import { Typography, Card, Tag, Spin } from '@arco-design/web-react';
-import { getHealth } from './api/http';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/login';
+import RegisterPage from './pages/register';
+import WorkspaceLayout from './pages/workspace/Layout';
+import WorkspacePage from './pages/workspace';
 
 export default function App() {
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    getHealth()
-      .then((d) => setVersion(d.version))
-      .catch(() => setVersion('unreachable'));
-  }, []);
   return (
-    <Card style={{ maxWidth: 480, margin: '80px auto' }}>
-      <Typography.Title heading={3}>daaspro</Typography.Title>
-      <Typography.Text>后端版本：</Typography.Text>
-      {version === null ? <Spin size={16} style={{ marginLeft: 8 }} /> : <Tag color="arcoblue">{version}</Tag>}
-    </Card>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route element={<WorkspaceLayout />}>
+        <Route path="/workspace" element={<WorkspacePage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/workspace" replace />} />
+    </Routes>
   );
 }
