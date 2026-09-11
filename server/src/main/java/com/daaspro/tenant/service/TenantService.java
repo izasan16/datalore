@@ -52,7 +52,8 @@ public class TenantService {
         tenant.setName(name);
         tenant.setStatus(1);
         tenantMapper.insert(tenant);
-        String schemaName = "tenant_" + tenant.getId();
+        // schema 名与登录 slug 一一对应（slug 格式已校验，无注入面）
+        String schemaName = "tenant_" + slug;
         tenant.setSchemaName(schemaName);
         tenantMapper.updateById(tenant);
         schemaProvisioner.createSchema(schemaName);

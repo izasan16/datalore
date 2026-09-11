@@ -30,7 +30,7 @@ class TenantRegisterTest {
         var r = tenantService.register("测试租户A", "testa", "admin", "password123");
         Integer n = jdbc.queryForObject(
                 "SELECT count(*) FROM information_schema.schemata WHERE schema_name = ?",
-                Integer.class, "tenant_" + r.tenantId());
+                Integer.class, "tenant_testa");
         assertThat(n).isEqualTo(1);
         Integer admins = jdbc.queryForObject(
                 "SELECT count(*) FROM sys_user WHERE tenant_id = ? AND role = 'admin'",

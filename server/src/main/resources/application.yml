@@ -25,4 +25,8 @@ daaspro:
 
 sa-token:
   token-name: Authorization
+  # 前后端分离：token 走 Authorization 头，Bearer 前缀由 sa-token 统一剥离
+  is-read-cookie: false
+  is-read-header: true
+  token-prefix: Bearer
   is-contract: false
