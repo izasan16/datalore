@@ -1,0 +1,10 @@
+# build
+server/target/
+web/dist/
+web/node_modules/
+*.class
+.idea/
+*.iml
+.vscode/
+.env
+logs/

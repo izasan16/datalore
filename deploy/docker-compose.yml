@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: daaspro-postgres
+    environment:
+      POSTGRES_DB: daaspro
+      POSTGRES_USER: daaspro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daaspro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: daaspro-redis
+    ports:
+      - "16379:6379"
+    volumes:
+      - redisdata:/data
+
+  minio:
+    image: minio/minio
+    container_name: daaspro-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
