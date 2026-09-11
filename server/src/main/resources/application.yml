@@ -24,6 +24,11 @@ daaspro:
   version: 0.1.0
   # dev 专用密钥（32 字节 base64 = daaspro_dev_key_32_bytes!!!!!!!!）。生产用环境变量 DAASPRO_CRYPTO_KEY 覆盖。
   crypto-key: "ZGFhc3Byb19kZXZfa2V5XzMyX2J5dGVzISEhISEhISE="
+  minio:
+    endpoint: http://localhost:19000
+    access-key: daaspro
+    secret-key: daaspro_dev_2026
+    bucket: daaspro-staging
 
 sa-token:
   token-name: Authorization
