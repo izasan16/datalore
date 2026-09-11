@@ -1,0 +1,28 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: daaspro
+  datasource:
+    url: jdbc:postgresql://localhost:15432/daaspro
+    username: daaspro
+    password: daaspro_dev_2026
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: localhost
+      port: 16379
+
+daaspro:
+  version: 0.1.0
+
+sa-token:
+  token-name: Authorization
+  is-contract: false
