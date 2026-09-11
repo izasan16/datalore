@@ -10,6 +10,8 @@ import com.daaspro.tenant.mapper.UserMapper;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class AuthService {
 
@@ -23,20 +25,23 @@ public class AuthService {
     }
 
     /**
-     * 登录标识 tenantSlug 即注册时的 slug（tenant.slug 列）。
+     * 登录：用户名全局查找所属租户（当前 MVP 假定用户名全局唯一；
+     * 同名冲突时由注册侧避免）。多租户同名用户后续用邮箱/手机号区分。
      */
-    public UserEntity login(String tenantSlug, String username, String password) {
-        TenantEntity tenant = tenantMapper.selectOne(new LambdaQueryWrapper<TenantEntity>()
-                .eq(TenantEntity::getSlug, tenantSlug));
-        if (tenant == null) throw new BizException(401, "租户、账号或密码错误");
-        UserEntity user = userMapper.selectOne(new LambdaQueryWrapper<UserEntity>()
-                .eq(UserEntity::getTenantId, tenant.getId())
+    public UserEntity login(String username, String password) {
+        List<UserEntity> users = userMapper.selectList(new LambdaQueryWrapper<UserEntity>()
                 .eq(UserEntity::getUsername, username));
-        if (user == null || !encoder.matches(password, user.getPasswordHash())) {
-            throw new BizException(401, "租户、账号或密码错误");
+        UserEntity user = users.stream()
+                .filter(u -> encoder.matches(password, u.getPasswordHash()))
+                .findFirst()
+                .orElse(null);
+        if (user == null) throw new BizException(401, "账号或密码错误");
+        TenantEntity tenant = tenantMapper.selectById(user.getTenantId());
+        if (tenant == null || tenant.getStatus() != 1) {
+            throw new BizException(403, "账号所在租户已停用");
         }
-        if (user.getStatus() != 1 || tenant.getStatus() != 1) {
-            throw new BizException(403, "账号或租户已停用");
+        if (user.getStatus() != 1) {
+            throw new BizException(403, "账号已停用");
         }
         StpUtil.login(user.getId());
         StpUtil.getSession().set("username", user.getUsername());

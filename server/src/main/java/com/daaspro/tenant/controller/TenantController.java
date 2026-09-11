@@ -21,12 +21,13 @@ public class TenantController {
         this.tenantService = tenantService;
     }
 
-    public record RegisterReq(@NotBlank String name, @NotBlank String slug,
+    public record RegisterReq(@NotBlank String name,
                               @NotBlank String adminUsername, @NotBlank String adminPassword) {}
 
+    /** 注册：slug 由服务端从名称生成，用户无感。返回 slug 便于前端紧接自动登录。 */
     @PostMapping("/register")
     public Map<String, Object> register(@RequestBody RegisterReq req) {
-        var r = tenantService.register(req.name(), req.slug(), req.adminUsername(), req.adminPassword());
-        return Map.of("tenantId", r.tenantId(), "adminUserId", r.adminUserId());
+        var slug = tenantService.registerAutoSlug(req.name(), req.adminUsername(), req.adminPassword());
+        return Map.of("slug", slug, "adminUsername", req.adminUsername());
     }
 }

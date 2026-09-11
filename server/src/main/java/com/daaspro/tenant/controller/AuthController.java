@@ -21,11 +21,11 @@ public class AuthController {
         this.authService = authService;
     }
 
-    public record LoginReq(@NotBlank String tenantSlug, @NotBlank String username, @NotBlank String password) {}
+    public record LoginReq(@NotBlank String username, @NotBlank String password) {}
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody LoginReq req) {
-        UserEntity u = authService.login(req.tenantSlug(), req.username(), req.password());
+        UserEntity u = authService.login(req.username(), req.password());
         return Map.of(
                 "token", StpUtil.getTokenValue(),
                 "user", Map.of("id", u.getId(), "username", u.getUsername(),

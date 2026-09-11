@@ -34,8 +34,36 @@ public class TenantService {
 
     public record RegisterResult(Long tenantId, Long adminUserId) {}
 
+    public Long getTenantIdBySlug(String slug) {
+        TenantEntity t = tenantMapper.selectOne(new LambdaQueryWrapper<TenantEntity>()
+                .eq(TenantEntity::getSlug, slug));
+        if (t == null) throw new BizException(404, "租户不存在");
+        return t.getId();
+    }
+
+    /**
+     * 用户无感注册：slug 由服务端生成（pinyin 首选不可用，直接用随机短码 + 名称原样保存）。
+     * 名称重复时自动加后缀，不报错。
+     */
+    @Transactional
+    public String registerAutoSlug(String name, String adminUsername, String adminPassword) {
+        if (adminPassword == null || adminPassword.length() < 8) {
+            throw new BizException(400, "管理员密码至少 8 位");
+        }
+        String slug;
+        int attempt = 0;
+        do {
+            slug = "t" + Long.toString(System.currentTimeMillis(), 36) + (attempt == 0 ? "" : "x" + attempt);
+            attempt++;
+        } while (tenantMapper.selectCount(new LambdaQueryWrapper<TenantEntity>()
+                .eq(TenantEntity::getSlug, slug)) > 0);
+        register(name, slug, adminUsername, adminPassword);
+        return slug;
+    }
+
     /**
      * slug 仅小写字母开头、小写字母/数字/下划线，3-32 位；用于 schema 名，防注入。
+     * 名称或 slug 重复时抛业务异常（自动注册路径已去重）。
      */
     @Transactional
     public RegisterResult register(String name, String slug, String adminUsername, String adminPassword) {
@@ -51,6 +79,12 @@ public class TenantService {
                         .or().eq(TenantEntity::getSlug, slug));
         if (count > 0) {
             throw new BizException(400, "租户名或标识已存在");
+        }
+        // 用户名全局唯一（V5 约束的提前检查，给出可读错误）
+        Long dupUser = userMapper.selectCount(
+                new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getUsername, adminUsername));
+        if (dupUser > 0) {
+            throw new BizException(400, "用户名已被占用，请换一个（用户名全局唯一）");
         }
 
         TenantEntity tenant = new TenantEntity();

@@ -20,10 +20,10 @@ class DataSourceCrudTest {
     @Autowired DataSourceService service;
 
     private long newTenant(String prefix) {
-        String slug = prefix + System.nanoTime() % 100000;
-        var r = tenantService.register("租户" + slug, slug, "admin", "password123");
-        TenantContext.set(new TenantContext.Ctx(r.tenantId(), 1L, "admin", "admin", "tenant_" + slug));
-        return r.tenantId();
+        var slug = tenantService.registerAutoSlug("租户" + prefix + System.nanoTime(), "adm_" + prefix + System.nanoTime(), "password123");
+        var t = tenantService.getTenantIdBySlug(slug);
+        TenantContext.set(new TenantContext.Ctx(t, 1L, "admin", "admin", "tenant_" + slug));
+        return t;
     }
 
     @Test

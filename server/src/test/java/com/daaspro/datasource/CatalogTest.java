@@ -19,10 +19,10 @@ class CatalogTest {
 
     @Test
     void builtinAutoRegisteredAndBrowsable() {
-        String slug = "cat" + System.nanoTime() % 100000;
-        var r = tenantService.register("目录租户" + slug, slug, "admin", "password123");
+        String slug = tenantService.registerAutoSlug("目录租户" + System.nanoTime(), "admcat" + System.nanoTime(), "password123");
+        Long tid = tenantService.getTenantIdBySlug(slug);
 
-        TenantContext.set(new TenantContext.Ctx(r.tenantId(), 1L, "admin", "admin", "tenant_" + slug));
+        TenantContext.set(new TenantContext.Ctx(tid, 1L, "admin", "admin", "tenant_" + slug));
         var list = dataSourceService.list();
         assertThat(list).anyMatch(d -> Boolean.TRUE.equals(d.getBuiltin()));
         var builtin = list.stream().filter(d -> Boolean.TRUE.equals(d.getBuiltin())).findFirst().orElseThrow();

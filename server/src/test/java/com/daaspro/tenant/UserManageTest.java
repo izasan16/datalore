@@ -36,11 +36,12 @@ class UserManageTest {
         return bootRest.getRootUri() + path;
     }
 
-    private String registerAndLogin(String slug) {
-        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "用户管理租户" + slug, "slug", slug,
-                "adminUsername", "admin", "adminPassword", "password123"), Map.class);
+    private String registerAndLogin() {
+        String adminUser = "admu" + System.currentTimeMillis();
+        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "用户管理租户" + adminUser,
+                "adminUsername", adminUser, "adminPassword", "password123"), Map.class);
         var login = rest().postForEntity(url("/api/auth/login"),
-                Map.of("tenantSlug", slug, "username", "admin", "password", "password123"), Map.class);
+                Map.of("username", adminUser, "password", "password123"), Map.class);
         return (String) login.getBody().get("token");
     }
 
@@ -53,9 +54,10 @@ class UserManageTest {
 
     @Test
     void adminCreatesAndDisablesMember() {
-        String token = registerAndLogin("uma" + System.currentTimeMillis());
+        String token = registerAndLogin();
+        String memberUser = "zhang" + System.currentTimeMillis();
         var create = rest().exchange(url("/api/users"), HttpMethod.POST,
-                new HttpEntity<>(Map.of("username", "zhang", "password", "password123",
+                new HttpEntity<>(Map.of("username", memberUser, "password", "password123",
                         "displayName", "张三", "role", "member"), auth(token)), Map.class);
         assertThat(create.getStatusCode().is2xxSuccessful()).isTrue();
         Number id = (Number) create.getBody().get("id");
@@ -70,22 +72,19 @@ class UserManageTest {
 
         // 被停用用户无法登录
         var login = rest().postForEntity(url("/api/auth/login"),
-                Map.of("tenantSlug", "x", "username", "zhang", "password", "password123"), Map.class);
-        // slug 错也会 401；这里直接断言非 2xx 即可
+                Map.of("username", memberUser, "password", "password123"), Map.class);
         assertThat(login.getStatusCode().is2xxSuccessful()).isFalse();
     }
 
     @Test
     void memberCannotCreateUser() {
-        String slug = "umb" + System.currentTimeMillis();
-        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "用户管理租户" + slug, "slug", slug,
-                "adminUsername", "admin", "adminPassword", "password123"), Map.class);
-        String adminToken = registerAndLogin(slug);
+        String adminToken = registerAndLogin();
+        String memberUser = "zhang" + System.currentTimeMillis();
         rest().exchange(url("/api/users"), HttpMethod.POST,
-                new HttpEntity<>(Map.of("username", "zhang", "password", "password123", "role", "member"),
+                new HttpEntity<>(Map.of("username", memberUser, "password", "password123", "role", "member"),
                         auth(adminToken)), Map.class);
         var memberLogin = rest().postForEntity(url("/api/auth/login"),
-                Map.of("tenantSlug", slug, "username", "zhang", "password", "password123"), Map.class);
+                Map.of("username", memberUser, "password", "password123"), Map.class);
         String memberToken = (String) memberLogin.getBody().get("token");
         var denied = rest().exchange(url("/api/users"), HttpMethod.POST,
                 new HttpEntity<>(Map.of("username", "li", "password", "password123", "role", "member"),

@@ -41,13 +41,13 @@ class AuthFlowTest {
 
     @Test
     void registerLoginMeFlow() {
-        String slug = "flowa" + System.currentTimeMillis();
-        var regReq = Map.of("name", "流程租户" + slug, "slug", slug,
-                "adminUsername", "admin", "adminPassword", "password123");
-        var reg = rest().postForEntity(url("/api/tenant/register"), regReq, Map.class);
+        String name = "流程租户" + System.currentTimeMillis();
+        String adminUser = "admin_" + System.currentTimeMillis();
+        var reg = rest().postForEntity(url("/api/tenant/register"),
+                Map.of("name", name, "adminUsername", adminUser, "adminPassword", "password123"), Map.class);
         assertThat(reg.getStatusCode().is2xxSuccessful()).isTrue();
 
-        var loginReq = Map.of("tenantSlug", slug, "username", "admin", "password", "password123");
+        var loginReq = Map.of("username", adminUser, "password", "password123");
         ResponseEntity<Map> login = rest().postForEntity(url("/api/auth/login"), loginReq, Map.class);
         assertThat(login.getStatusCode().is2xxSuccessful()).isTrue();
         String token = (String) login.getBody().get("token");
@@ -57,7 +57,7 @@ class AuthFlowTest {
         headers.setBearerAuth(token);
         ResponseEntity<Map> me = rest().exchange(url("/api/auth/me"), HttpMethod.GET, new HttpEntity<>(headers), Map.class);
         assertThat(me.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(me.getBody().get("username")).isEqualTo("admin");
+        assertThat(me.getBody().get("username")).isEqualTo(adminUser);
 
         ResponseEntity<Map> noAuth = rest().getForEntity(url("/api/auth/me"), Map.class);
         assertThat(noAuth.getStatusCode().value()).isEqualTo(401);
@@ -65,11 +65,10 @@ class AuthFlowTest {
 
     @Test
     void wrongPasswordRejected() {
-        String slug = "flowb" + System.currentTimeMillis();
-        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "流程租户B" + slug, "slug", slug,
-                "adminUsername", "admin", "adminPassword", "password123"), Map.class);
+        rest().postForEntity(url("/api/tenant/register"), Map.of("name", "流程租户B" + System.currentTimeMillis(),
+                "adminUsername", "admin_" + System.nanoTime(), "adminPassword", "password123"), Map.class);
         var bad = rest().postForEntity(url("/api/auth/login"),
-                Map.of("tenantSlug", slug, "username", "admin", "password", "wrong-pass"), Map.class);
+                Map.of("username", "nobody" + System.currentTimeMillis(), "password", "wrong-pass"), Map.class);
         assertThat(bad.getStatusCode().value()).isEqualTo(401);
     }
 }

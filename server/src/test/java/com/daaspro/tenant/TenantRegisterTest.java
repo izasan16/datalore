@@ -27,7 +27,7 @@ class TenantRegisterTest {
 
     @Test
     void registersTenantAndCreatesSchema() {
-        var r = tenantService.register("测试租户A", "testa", "admin", "password123");
+        var r = tenantService.register("测试租户A", "testa", "admin_" + System.nanoTime(), "password123");
         Integer n = jdbc.queryForObject(
                 "SELECT count(*) FROM information_schema.schemata WHERE schema_name = ?",
                 Integer.class, "tenant_testa");
@@ -36,5 +36,25 @@ class TenantRegisterTest {
                 "SELECT count(*) FROM sys_user WHERE tenant_id = ? AND role = 'admin'",
                 Integer.class, r.tenantId());
         assertThat(admins).isEqualTo(1);
+    }
+
+    @Test
+    void autoSlugRegisterGeneratesUniqueSlug() {
+        String suffix = String.valueOf(System.nanoTime());
+        String slug1 = tenantService.registerAutoSlug("自动注册租户1", "admin1_" + suffix, "password123");
+        String slug2 = tenantService.registerAutoSlug("自动注册租户2", "admin2_" + suffix, "password123");
+        assertThat(slug1).isNotEqualTo(slug2).matches("^t[a-z0-9x]+$");
+        Integer n = jdbc.queryForObject(
+                "SELECT count(*) FROM tenant WHERE slug = ?", Integer.class, slug1);
+        assertThat(n).isEqualTo(1);
+    }
+
+    @Test
+    void duplicateGlobalUsernameRejected() {
+        String suffix = String.valueOf(System.nanoTime());
+        tenantService.registerAutoSlug("重名租户1", "dup_" + suffix, "password123");
+        assertThatThrownBy(() -> tenantService.registerAutoSlug("重名租户2", "dup_" + suffix, "password123"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("用户名已被占用");
     }
 }
