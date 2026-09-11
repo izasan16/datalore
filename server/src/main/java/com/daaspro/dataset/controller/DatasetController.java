@@ -26,12 +26,14 @@ public class DatasetController {
     }
 
     public record ConfirmReq(@NotBlank String uploadId, @NotBlank String name,
-                             String fileName, List<String> columns, List<String> types) {}
+                             String fileName, List<String> columns, List<String> types,
+                             Long datasourceId, String existingTable) {}
 
     @PostMapping("/confirm")
     public Map<String, Object> confirm(@RequestBody ConfirmReq req) {
         var d = service.confirm(new DatasetService.ConfirmReq(
-                req.uploadId(), req.name(), req.fileName(), req.columns(), req.types()));
+                req.uploadId(), req.name(), req.fileName(), req.columns(), req.types(),
+                req.datasourceId(), req.existingTable()));
         return Map.of("id", d.getId(), "tableName", d.getTableName(), "rowCount", d.getRowCount());
     }
 

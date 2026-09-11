@@ -77,8 +77,14 @@ public class DatasetService {
     }
 
     public record ConfirmReq(String uploadId, String name, String fileName,
-                             List<String> columns, List<String> types) {}
+                             List<String> columns, List<String> types, Long datasourceId,
+                             String existingTable) {}
 
+    /**
+     * 确认导入。datasourceId 为空 → 内置数据源建新表；
+     * datasourceId=内置源 且 existingTable 非空 → 向已有表追加（校验列名完全一致）。
+     * 外部数据源不支持写入导入，MVP 只读。
+     */
     public DatasetEntity confirm(ConfirmReq req) {
         if (req.columns() == null || req.columns().isEmpty() || req.types() == null
                 || req.columns().size() != req.types().size()) {
@@ -88,23 +94,54 @@ public class DatasetService {
             throw new BizException(400, "列类型非法");
         }
         if (req.name() == null || req.name().isBlank()) throw new BizException(400, "数据集名称不能为空");
+
+        DataSourceEntity target;
+        if (req.datasourceId == null) {
+            target = builtinDatasource();
+        } else {
+            target = dataSourceService.getOwned(req.datasourceId());
+            if (!Boolean.TRUE.equals(target.getBuiltin())) {
+                throw new BizException(400, "外部数据源暂不支持上传导入（MVP 只读），请选择内置数据源");
+            }
+        }
+        // 追加只对内置源有意义；未传 datasourceId 时也允许 append（默认内置源）
+        boolean append = req.existingTable() != null && !req.existingTable().isBlank();
+
         Long dup = mapper.selectCount(new LambdaQueryWrapper<DatasetEntity>()
                 .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
                 .eq(DatasetEntity::getName, req.name()));
         if (dup > 0) throw new BizException(400, "同名数据集已存在");
 
-        DataSourceEntity builtin = builtinDatasource();
-        String table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-
         byte[] csv = download(req.uploadId());
-        long copyCount = createTableAndCopy(builtin, table, req.columns(), req.types(), csv);
+        String table;
+        long copyCount;
+        List<String> columns = req.columns();
+        List<String> types = req.types();
+
+        if (append) {
+            table = req.existingTable();
+            // 校验目标表存在且列名一致（列名集合与顺序都要求一致，导入语义最简单可靠）
+            List<Map<String, String>> actual = tableColumns(target, table);
+            if (actual.isEmpty()) throw new BizException(400, "目标表不存在: " + table);
+            List<String> actualNames = actual.stream().map(c -> c.get("name")).toList();
+            if (!actualNames.equals(columns)) {
+                throw new BizException(400, "列与目标表不一致。目标表列: " + actualNames);
+            }
+            copyCount = copyInto(target, table, columns, csv, true);
+        } else {
+            table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+            copyCount = createTableAndCopy(target, table, columns, types, csv);
+        }
 
         DatasetEntity ds = new DatasetEntity();
         ds.setTenantId(TenantContext.requireTenantId());
         ds.setName(req.name());
         ds.setTableName(table);
-        ds.setDatasourceId(builtin.getId());
-        ds.setColumnsDef(toColumnsJson(req.columns(), req.types()));
+        ds.setDatasourceId(target.getId());
+        List<Map<String, String>> actualCols = append ? tableColumns(target, table) : null;
+        List<String> finalCols = append ? actualCols.stream().map(c -> c.get("name")).toList() : columns;
+        List<String> finalTypes = append ? actualCols.stream().map(c -> c.get("type")).toList() : types;
+        ds.setColumnsDef(toColumnsJson(finalCols, finalTypes));
         ds.setFileName(req.fileName());
         ds.setRowCount(copyCount);
         mapper.insert(ds);
@@ -112,25 +149,65 @@ public class DatasetService {
     }
 
     /** 建表并 COPY 导入，返回导入行数。 */
-    private long createTableAndCopy(DataSourceEntity builtin, String table,
+    private long createTableAndCopy(DataSourceEntity ds, String table,
                                     List<String> columns, List<String> types, byte[] csv) {
         String colDefs = IntStream.range(0, columns.size())
                 .mapToObj(i -> quote(columns.get(i)) + " " + types.get(i))
                 .reduce((a, b) -> a + ", " + b).orElse("");
         String ddl = "CREATE TABLE " + quote(table) + " (" + colDefs + ")";
-        String copySql = "COPY " + quote(table) + " (" + columns.stream().map(this::quote)
-                .reduce((a, b) -> a + "," + b).orElse("")
-                + ") FROM STDIN WITH (FORMAT csv, HEADER true, NULL '')";
-        try (Connection conn = connectionManager.builtinPool(builtin.getId(), builtin.getSchemaName()).getConnection()) {
+        try (Connection conn = openConnection(ds)) {
             try (var st = conn.createStatement()) {
                 st.execute(ddl);
             }
-            CopyManager cm = conn.unwrap(PGConnection.class).getCopyAPI();
-            return cm.copyIn(copySql, new ByteArrayInputStream(csv), 8192);
+            return copyInto(ds, table, columns, csv, true);
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
             throw new BizException(400, "导入失败: " + DataSourceService.rootMessage(e));
+        }
+    }
+
+    private long copyInto(DataSourceEntity ds, String table, List<String> columns, byte[] csv, boolean header) {
+        String copySql = "COPY " + quote(table) + " (" + columns.stream().map(this::quote)
+                .reduce((a, b) -> a + "," + b).orElse("")
+                + ") FROM STDIN WITH (FORMAT csv, HEADER " + header + ", NULL '')";
+        try (Connection conn = openConnection(ds)) {
+            CopyManager cm = conn.unwrap(PGConnection.class).getCopyAPI();
+            return cm.copyIn(copySql, new ByteArrayInputStream(csv), 8192);
+        } catch (Exception e) {
+            throw new BizException(400, "导入失败: " + DataSourceService.rootMessage(e));
+        }
+    }
+
+    private Connection openConnection(DataSourceEntity ds) {
+        try {
+            if (Boolean.TRUE.equals(ds.getBuiltin())) {
+                return connectionManager.builtinPool(ds.getId(), ds.getSchemaName()).getConnection();
+            }
+            throw new BizException(400, "该数据源不支持导入");
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "获取连接失败: " + DataSourceService.rootMessage(e));
+        }
+    }
+
+    /** 读取目标表列结构（内置 PG 源）。 */
+    private List<Map<String, String>> tableColumns(DataSourceEntity ds, String table) {
+        String sql = "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position";
+        try (Connection conn = openConnection(ds);
+             var st = conn.prepareStatement(sql)) {
+            st.setString(1, ds.getSchemaName());
+            st.setString(2, table);
+            try (var rs = st.executeQuery()) {
+                var rows = new ArrayList<Map<String, String>>();
+                while (rs.next()) rows.add(Map.of("name", rs.getString(1), "type", rs.getString(2)));
+                return rows;
+            }
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "读取表结构失败: " + DataSourceService.rootMessage(e));
         }
     }
 
@@ -208,6 +285,14 @@ public class DatasetService {
         }
     }
 
+    private List<Map<String, String>> parseColumns(String json) {
+        try {
+            return om.readValue(json, new TypeReference<List<Map<String, String>>>() {});
+        } catch (Exception e) {
+            throw new BizException(500, "列定义损坏");
+        }
+    }
+
     private String quote(String ident) {
         return "\"" + ident.replace("\"", "\"\"") + "\"";
     }
@@ -219,14 +304,6 @@ public class DatasetService {
             return om.writeValueAsString(defs);
         } catch (Exception e) {
             throw new BizException(500, "列定义序列化失败");
-        }
-    }
-
-    private List<Map<String, String>> parseColumns(String json) {
-        try {
-            return om.readValue(json, new TypeReference<List<Map<String, String>>>() {});
-        } catch (Exception e) {
-            throw new BizException(500, "列定义损坏");
         }
     }
 }

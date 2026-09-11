@@ -102,6 +102,54 @@ class DatasetFlowTest {
     }
 
     @Test
+    void appendToExistingTable() {
+        String token = token();
+        // 第一次上传导入建表
+        String csv1 = "名称,数量\n甲,10\n乙,20\n";
+        Map<String, Object> first = doImport(token, csv1, "追加测试" + System.currentTimeMillis(), null);
+        String table = (String) first.get("tableName");
+
+        // 第二次同结构文件追加
+        String csv2 = "名称,数量\n丙,30\n";
+        doImport(token, csv2, "追加批次" + System.currentTimeMillis(), table);
+
+        // 预览第一批：表里现在应该有 3 行（preview LIMIT 20 覆盖全部）
+        var preview = rest().exchange(url("/api/datasets/" + ((Number) first.get("id")).longValue() + "/preview"),
+                HttpMethod.GET, new HttpEntity<>(jsonHeaders(token)), Map.class);
+        assertThat((java.util.List<Object>) preview.getBody().get("rows")).hasSize(3);
+    }
+
+    private Map<String, Object> doImport(String token, String csv, String name, String existingTable) {
+        ByteArrayResource res = new ByteArrayResource(csv.getBytes(StandardCharsets.UTF_8)) {
+            @Override public String getFilename() { return "part.csv"; }
+        };
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", res);
+        var up = rest().postForEntity(url("/api/datasets/upload"),
+                new HttpEntity<>(body, authMultipart(token)), Map.class);
+        var payload = new java.util.HashMap<String, Object>();
+        payload.put("uploadId", up.getBody().get("uploadId"));
+        payload.put("name", name);
+        payload.put("fileName", "part.csv");
+        payload.put("columns", up.getBody().get("columns"));
+        payload.put("types", up.getBody().get("types"));
+        if (existingTable != null) payload.put("existingTable", existingTable);
+        var confirm = rest().postForEntity(url("/api/datasets/confirm"),
+                new HttpEntity<>(payload, jsonHeaders(token)), Map.class);
+        assertThat(confirm.getStatusCode().is2xxSuccessful()).isTrue();
+        return confirm.getBody();
+    }
+
+    private String getTableName(String token, Number id) {
+        var list = rest().exchange(url("/api/datasets"), HttpMethod.GET,
+                new HttpEntity<>(jsonHeaders(token)), java.util.List.class);
+        @SuppressWarnings("unchecked")
+        var rows = (java.util.List<Map<String, Object>>) list.getBody();
+        return rows.stream().filter(r -> ((Number) r.get("id")).longValue() == id.longValue())
+                .findFirst().map(r -> (String) r.get("tableName")).orElseThrow();
+    }
+
+    @Test
     void crossTenantUploadIdRejected() {
         String t1 = token();
         String csv = "a\n1\n";
