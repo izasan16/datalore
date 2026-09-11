@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Form, Input, Button, Message } from '@arco-design/web-react';
-import { registerTenant } from '../../api/auth';
+import { registerTenant, login } from '../../api/auth';
 import AuthLayout from '../auth/AuthLayout';
 
 export default function RegisterPage() {
@@ -9,12 +9,17 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
 
-  async function onSubmit(v: { name: string; slug: string; adminUsername: string; adminPassword: string }) {
+  async function onSubmit(v: { name: string; adminUsername: string; adminPassword: string }) {
     setLoading(true);
     try {
-      await registerTenant(v.name, v.slug, v.adminUsername, v.adminPassword);
-      Message.success('注册成功，请登录');
-      nav('/login');
+      const slug = await registerTenant(v.name, v.adminUsername, v.adminPassword);
+      // 注册即登录：后端返回 slug 并直接登录
+      const r = await login(v.adminUsername, v.adminPassword);
+      localStorage.setItem('daaspro.token', r.token);
+      localStorage.setItem('daaspro.user', JSON.stringify(r.user));
+      localStorage.setItem('daaspro.slug', slug);
+      Message.success('工作区已创建');
+      nav('/workspace');
     } catch (e: any) {
       Message.error(e.response?.data?.message || '注册失败');
     } finally {
@@ -25,29 +30,10 @@ export default function RegisterPage() {
   return (
     <AuthLayout>
       <h2>创建你的数据工作区</h2>
-      <p className="auth-panel-sub">注册后自动获得独立的数据空间与管理员账号</p>
+      <p className="auth-panel-sub">只需团队名称和管理员账号，注册后立即进入工作台</p>
       <Form form={form} onSubmit={onSubmit} layout="vertical" className="auth-form">
         <Form.Item label="企业 / 团队名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
           <Input placeholder="如：某某数据团队" />
-        </Form.Item>
-        <Form.Item
-          label="租户标识"
-          field="slug"
-          rules={[
-            { required: true, message: '请输入租户标识' },
-            {
-              validator: (value: string | undefined, callback: (error?: React.ReactNode) => void) => {
-                const v = value || '';
-                if (!/^[a-z][a-z0-9_]{2,31}$/.test(v)) {
-                  callback('小写字母开头，3-32 位小写字母/数字/下划线');
-                } else {
-                  callback();
-                }
-              },
-            },
-          ]}
-        >
-          <Input placeholder="如：myteam（之后用它登录）" />
         </Form.Item>
         <Form.Item label="管理员用户名" field="adminUsername" rules={[{ required: true, message: '请输入管理员用户名' }]}>
           <Input placeholder="admin" />

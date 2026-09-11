@@ -4,6 +4,7 @@ import RegisterPage from './pages/register';
 import WorkspaceLayout from './pages/workspace/Layout';
 import WorkspacePage from './pages/workspace';
 import DatasourcePage from './pages/datasource';
+import DatasourceCreatePage from './pages/datasource/create';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Route element={<WorkspaceLayout />}>
         <Route path="/workspace" element={<WorkspacePage />} />
         <Route path="/datasource" element={<DatasourcePage />} />
+        <Route path="/datasource/new" element={<DatasourceCreatePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/workspace" replace />} />
     </Routes>

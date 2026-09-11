@@ -5,12 +5,12 @@ export interface LoginResult {
   user: { id: number; username: string; displayName: string; role: string };
 }
 
-export function login(tenantSlug: string, username: string, password: string) {
-  return http.post<LoginResult>('/auth/login', { tenantSlug, username, password }).then((r) => r.data);
+export function login(username: string, password: string) {
+  return http.post<LoginResult>('/auth/login', { username, password }).then((r) => r.data);
 }
 
-export function registerTenant(name: string, slug: string, adminUsername: string, adminPassword: string) {
-  return http.post('/tenant/register', { name, slug, adminUsername, adminPassword }).then((r) => r.data);
+export function registerTenant(name: string, adminUsername: string, adminPassword: string) {
+  return http.post<{ slug: string }>('/tenant/register', { name, adminUsername, adminPassword }).then((r) => r.data.slug);
 }
 
 export function me() {

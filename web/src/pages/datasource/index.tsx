@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Button, Card, Drawer, Form, Input, InputNumber, Message, Modal, Select, Space,
+  Button, Card, Drawer, Message, Modal, Space,
   Table, Tag, Typography,
 } from '@arco-design/web-react';
 import { IconPlus, IconRefresh } from '@arco-design/web-react/icon';
 import {
-  ColumnInfo, DataSourceInfo, createDatasource, deleteDatasource, listColumns,
+  ColumnInfo, DataSourceInfo, deleteDatasource, listColumns,
   listDatasources, listTables, testDatasource,
 } from '../../api/datasource';
 
@@ -16,19 +17,14 @@ const TYPE_LABEL: Record<string, string> = {
   oracle: 'Oracle',
 };
 
-const TYPE_OPTIONS = Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label }));
-
 export default function DatasourcePage() {
+  const nav = useNavigate();
   const [list, setList] = useState<DataSourceInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [createVisible, setCreateVisible] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [testingNew, setTestingNew] = useState(false);
   const [browseDs, setBrowseDs] = useState<DataSourceInfo | null>(null);
   const [tables, setTables] = useState<{ name: string }[]>([]);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [currentTable, setCurrentTable] = useState<string | null>(null);
-  const [form] = Form.useForm();
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -44,56 +40,6 @@ export default function DatasourcePage() {
   useEffect(() => {
     reload();
   }, [reload]);
-
-  async function onCreate(v: any) {
-    setCreating(true);
-    try {
-      await createDatasource({
-        name: v.name,
-        type: v.type,
-        host: v.host,
-        port: v.port || undefined,
-        databaseName: v.databaseName,
-        schemaName: v.schemaName || undefined,
-        username: v.username,
-        password: v.password,
-      });
-      Message.success('数据源已创建');
-      setCreateVisible(false);
-      form.resetFields();
-      reload();
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '创建失败');
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function onTestNew() {
-    const v = await form.validate(['type', 'host', 'port', 'databaseName', 'schemaName', 'username', 'password']);
-    setTestingNew(true);
-    try {
-      await fetch('/api/datasources/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('daaspro.token') || ''}`,
-        },
-        body: JSON.stringify({
-          type: v.type, host: v.host, port: v.port || undefined,
-          databaseName: v.databaseName, schemaName: v.schemaName || undefined,
-          username: v.username, password: v.password,
-        }),
-      }).then(async (r) => {
-        if (!r.ok) throw Object.assign(new Error(), { response: { data: await r.json().catch(() => ({})) } });
-      });
-      Message.success('连接成功');
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '连接失败');
-    } finally {
-      setTestingNew(false);
-    }
-  }
 
   async function onTestExisting(ds: DataSourceInfo) {
     try {
@@ -150,7 +96,7 @@ export default function DatasourcePage() {
       extra={
         <Space>
           <Button icon={<IconRefresh />} onClick={reload} />
-          <Button type="primary" icon={<IconPlus />} onClick={() => setCreateVisible(true)}>
+          <Button type="primary" icon={<IconPlus />} onClick={() => nav('/datasource/new')}>
             新建数据源
           </Button>
         </Space>
@@ -191,45 +137,6 @@ export default function DatasourcePage() {
           },
         ]}
       />
-
-      <Modal
-        title="新建数据源"
-        visible={createVisible}
-        onCancel={() => setCreateVisible(false)}
-        footer={null}
-        style={{ width: 480 }}
-      >
-        <Form form={form} onSubmit={onCreate} layout="vertical" style={{ marginTop: 12 }}>
-          <Form.Item label="名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
-            <Input placeholder="如：业务库" />
-          </Form.Item>
-          <Form.Item label="类型" field="type" initialValue="postgresql" rules={[{ required: true, message: '请选择类型' }]}>
-            <Select options={TYPE_OPTIONS} />
-          </Form.Item>
-          <Form.Item label="主机" field="host" rules={[{ required: true, message: '请输入主机' }]}>
-            <Input placeholder="如：192.168.1.10" />
-          </Form.Item>
-          <Form.Item label="端口（留空用默认）" field="port">
-            <InputNumber placeholder="默认端口自动填" style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label="数据库" field="databaseName" rules={[{ required: true, message: '请输入数据库名' }]}>
-            <Input placeholder="database" />
-          </Form.Item>
-          <Form.Item label="Schema（PG 可选）" field="schemaName">
-            <Input placeholder="public" />
-          </Form.Item>
-          <Form.Item label="用户名" field="username" rules={[{ required: true, message: '请输入用户名' }]}>
-            <Input placeholder="用户名" />
-          </Form.Item>
-          <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password placeholder="密码" />
-          </Form.Item>
-          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-            <Button onClick={onTestNew} loading={testingNew}>测试连接</Button>
-            <Button type="primary" htmlType="submit" loading={creating}>保存</Button>
-          </Space>
-        </Form>
-      </Modal>
 
       <Drawer
         title={browseDs ? `表浏览 · ${browseDs.name}` : ''}
