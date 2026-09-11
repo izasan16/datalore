@@ -24,7 +24,7 @@ interface MeInfo {
 const MENU = [
   { key: 'workspace', title: '工作台', icon: <IconHome /> },
   { key: 'datasource', title: '数据源', icon: <IconStorage /> },
-  { key: 'dataset', title: '数据集', icon: <IconCloud />, disabled: true },
+  { key: 'dataset', title: '数据集', icon: <IconCloud /> },
   { key: 'sqllab', title: 'SQL 分析', icon: <IconCode />, disabled: true },
   { key: 'apipub', title: 'API 发布', icon: <IconCloud />, disabled: true },
   { key: 'workflow', title: '工作流', icon: <IconBranch />, disabled: true },
