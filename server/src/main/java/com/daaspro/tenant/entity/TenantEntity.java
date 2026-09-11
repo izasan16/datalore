@@ -13,6 +13,7 @@ public class TenantEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String name;
+    private String slug;
     private String schemaName;
     private Integer status;
     private LocalDateTime createdAt;

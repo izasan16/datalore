@@ -23,11 +23,11 @@ public class AuthService {
     }
 
     /**
-     * 登录标识 tenantSlug 即注册时的 slug，对应 schema 名 tenant_{slug}。
+     * 登录标识 tenantSlug 即注册时的 slug（tenant.slug 列）。
      */
     public UserEntity login(String tenantSlug, String username, String password) {
         TenantEntity tenant = tenantMapper.selectOne(new LambdaQueryWrapper<TenantEntity>()
-                .eq(TenantEntity::getSchemaName, "tenant_" + tenantSlug));
+                .eq(TenantEntity::getSlug, tenantSlug));
         if (tenant == null) throw new BizException(401, "租户、账号或密码错误");
         UserEntity user = userMapper.selectOne(new LambdaQueryWrapper<UserEntity>()
                 .eq(UserEntity::getTenantId, tenant.getId())

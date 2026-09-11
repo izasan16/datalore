@@ -46,13 +46,16 @@ public class TenantService {
             throw new BizException(400, "管理员密码至少 8 位");
         }
         Long count = tenantMapper.selectCount(
-                new LambdaQueryWrapper<TenantEntity>().eq(TenantEntity::getName, name));
+                new LambdaQueryWrapper<TenantEntity>()
+                        .eq(TenantEntity::getName, name)
+                        .or().eq(TenantEntity::getSlug, slug));
         if (count > 0) {
-            throw new BizException(400, "租户名已存在");
+            throw new BizException(400, "租户名或标识已存在");
         }
 
         TenantEntity tenant = new TenantEntity();
         tenant.setName(name);
+        tenant.setSlug(slug);
         tenant.setStatus(1);
         tenantMapper.insert(tenant);
         // schema 名与登录 slug 一一对应（slug 格式已校验，无注入面）
