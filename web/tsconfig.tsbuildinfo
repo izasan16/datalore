@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/api/auth.ts","./src/api/http.ts","./src/pages/login/index.tsx","./src/pages/register/index.tsx","./src/pages/workspace/layout.tsx","./src/pages/workspace/index.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/api/auth.ts","./src/api/http.ts","./src/components/brand.tsx","./src/pages/auth/authlayout.tsx","./src/pages/login/index.tsx","./src/pages/register/index.tsx","./src/pages/workspace/layout.tsx","./src/pages/workspace/index.tsx"],"version":"5.9.3"}

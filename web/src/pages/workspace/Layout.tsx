@@ -1,13 +1,45 @@
-import { useState } from 'react';
-import { useNavigate, Outlet, Navigate } from 'react-router-dom';
-import { Layout, Menu, Typography, Button } from '@arco-design/web-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, Outlet } from 'react-router-dom';
+import { Layout, Menu, Typography, Button, Avatar } from '@arco-design/web-react';
+import {
+  IconStorage,
+  IconCode,
+  IconBranch,
+  IconCloud,
+  IconHome,
+  IconSettings,
+} from '@arco-design/web-react/icon';
 import { me, logout } from '../../api/auth';
+import { LogoMark } from '../../components/Brand';
 
 const { Sider, Header, Content } = Layout;
 
+interface MeInfo {
+  userId: number;
+  username: string;
+  role: string;
+  tenantId: number;
+}
+
+const MENU = [
+  { key: 'workspace', title: '工作台', icon: <IconHome /> },
+  { key: 'datasource', title: '数据源', icon: <IconStorage />, disabled: true },
+  { key: 'dataset', title: '数据集', icon: <IconCloud />, disabled: true },
+  { key: 'sqllab', title: 'SQL 分析', icon: <IconCode />, disabled: true },
+  { key: 'apipub', title: 'API 发布', icon: <IconCloud />, disabled: true },
+  { key: 'workflow', title: '工作流', icon: <IconBranch />, disabled: true },
+  { key: 'settings', title: '设置', icon: <IconSettings />, disabled: true },
+];
+
 export default function WorkspaceLayout() {
   const nav = useNavigate();
-  const [user, setUser] = useState<{ username: string; role: string; tenantId: number } | null>(null);
+  const [user, setUser] = useState<MeInfo | null>(null);
+
+  useEffect(() => {
+    me()
+      .then(setUser)
+      .catch(() => setUser(null));
+  }, []);
 
   function onLogout() {
     logout().finally(() => {
@@ -17,17 +49,35 @@ export default function WorkspaceLayout() {
     });
   }
 
+  if (user === null) {
+    // me() 失败或未加载完成时交给拦截器/守卫处理
+    return null;
+  }
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsedWidth={60} width={200} style={{ background: 'var(--color-bg-2)' }}>
-        <div style={{ padding: '16px 16px 8px', fontWeight: 600, fontSize: 18 }}>daaspro</div>
+      <Sider width={216} style={{ background: '#fff', borderRight: '1px solid var(--color-border-2)' }}>
+        <div className="ws-sider-logo">
+          <LogoMark size={28} />
+          daaspro
+        </div>
         <Menu
           defaultSelectedKeys={['workspace']}
           style={{ width: '100%' }}
           onClickMenuItem={(key) => nav(`/${key}`)}
         >
-          <Menu.Item key="workspace">工作台</Menu.Item>
+          {MENU.map((m) => (
+            <Menu.Item key={m.key} disabled={m.disabled}>
+              {m.icon}
+              {m.title}
+            </Menu.Item>
+          ))}
         </Menu>
+        <div style={{ padding: '12px 20px' }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            灰色菜单为后续迭代模块
+          </Typography.Text>
+        </div>
       </Sider>
       <Layout>
         <Header
@@ -36,35 +86,28 @@ export default function WorkspaceLayout() {
             justifyContent: 'flex-end',
             alignItems: 'center',
             gap: 12,
-            background: 'var(--color-bg-2)',
+            background: '#fff',
+            borderBottom: '1px solid var(--color-border-2)',
+            height: 56,
           }}
         >
-          <Typography.Text>{user ? `${user.username}（${user.role}）` : ''}</Typography.Text>
-          <Button size="small" onClick={onLogout}>
-            退出登录
+          <Avatar size={28} style={{ backgroundColor: 'var(--daaspro-primary)' }}>
+            {user.username.slice(0, 1).toUpperCase()}
+          </Avatar>
+          <Typography.Text>
+            {user.username}
+            <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
+              {user.role === 'admin' ? '管理员' : '成员'}
+            </Typography.Text>
+          </Typography.Text>
+          <Button size="mini" onClick={onLogout} style={{ marginLeft: 8 }}>
+            退出
           </Button>
         </Header>
-        <Content style={{ padding: 20 }}>
-          <UserGate onReady={setUser}>
-            <Outlet />
-          </UserGate>
+        <Content style={{ padding: 20, background: 'var(--color-fill-1)' }}>
+          <Outlet context={user} />
         </Content>
       </Layout>
     </Layout>
   );
-}
-
-function UserGate({ children, onReady }: { children: React.ReactNode; onReady: (u: any) => void }) {
-  const [state, setState] = useState<'loading' | 'ok' | 'deny'>('loading');
-  (function load() {
-    me()
-      .then((u) => {
-        onReady(u);
-        setState('ok');
-      })
-      .catch(() => setState('deny'));
-  })();
-  if (state === 'loading') return null;
-  if (state === 'deny') return <Navigate to="/login" replace />;
-  return <>{children}</>;
 }

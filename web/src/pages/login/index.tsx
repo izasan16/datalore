@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Card, Form, Input, Button, Message } from '@arco-design/web-react';
+import { Form, Input, Button, Message, Typography } from '@arco-design/web-react';
 import { login } from '../../api/auth';
+import AuthLayout from '../auth/AuthLayout';
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -24,8 +25,10 @@ export default function LoginPage() {
   }
 
   return (
-    <Card style={{ width: 400, margin: '120px auto' }} title="登录 daaspro">
-      <Form form={form} onSubmit={onSubmit} layout="vertical">
+    <AuthLayout>
+      <h2>欢迎回来</h2>
+      <p className="auth-panel-sub">登录你的租户工作区，继续数据分析之旅</p>
+      <Form form={form} onSubmit={onSubmit} layout="vertical" className="auth-form">
         <Form.Item label="租户标识" field="tenantSlug" rules={[{ required: true, message: '请输入租户标识' }]}>
           <Input placeholder="注册时填写的租户标识" />
         </Form.Item>
@@ -35,13 +38,16 @@ export default function LoginPage() {
         <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
           <Input.Password placeholder="密码" />
         </Form.Item>
-        <Button type="primary" htmlType="submit" long loading={loading}>
-          登录
+        <Button type="primary" htmlType="submit" long loading={loading} className="auth-submit">
+          登 录
         </Button>
-        <div style={{ marginTop: 12, textAlign: 'center' }}>
-          <Link to="/register">注册新租户</Link>
-        </div>
       </Form>
-    </Card>
+      <div className="auth-alt">
+        还没有工作区？<Link to="/register">注册新租户</Link>
+      </div>
+      <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8, textAlign: 'center', fontSize: 12 }}>
+        登录即代表同意平台服务条款
+      </Typography.Text>
+    </AuthLayout>
   );
 }
