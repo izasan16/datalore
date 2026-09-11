@@ -139,7 +139,7 @@ public class DataSourceService {
         return connectionManager.pool(ds, cipher.decrypt(ds.getPasswordEnc())).getConnection();
     }
 
-    static String rootMessage(Exception e) {
+    public static String rootMessage(Exception e) {
         Throwable t = e;
         while (t.getCause() != null) t = t.getCause();
         return t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();

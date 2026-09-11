@@ -42,7 +42,7 @@
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
-      <scope>runtime</scope>
+      <!-- CopyManager 编译期需要；runtime 也由本模块提供 -->
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
