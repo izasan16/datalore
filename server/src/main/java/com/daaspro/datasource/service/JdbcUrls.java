@@ -1,0 +1,97 @@
+package com.daaspro.datasource.service;
+
+import com.daaspro.common.exception.BizException;
+
+/** 各数据源类型的 JDBC URL 与目录查询。schema/table 参数为受控值，拼接前做单引号转义。 */
+public enum JdbcUrls {
+
+    POSTGRESQL {
+        @Override
+        public String url(String host, int port, String db, String schema) {
+            String u = "jdbc:postgresql://" + host + ":" + port + "/" + db;
+            return schema == null ? u : u + "?currentSchema=" + schema;
+        }
+        @Override
+        public int defaultPort() { return 5432; }
+        @Override
+        public String listTablesSql(String schema) {
+            return "SELECT tablename FROM pg_tables WHERE schemaname = '" + esc(schema) + "' ORDER BY 1";
+        }
+        @Override
+        public String listColumnsSql(String schema, String table) {
+            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
+                    + esc(schema) + "' AND table_name = '" + esc(table) + "' ORDER BY ordinal_position";
+        }
+    },
+    MYSQL {
+        @Override
+        public String url(String host, int port, String db, String schema) {
+            return "jdbc:mysql://" + host + ":" + port + "/" + db
+                    + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai";
+        }
+        @Override
+        public int defaultPort() { return 3306; }
+        @Override
+        public String listTablesSql(String schema) {
+            return "SELECT table_name FROM information_schema.tables WHERE table_schema = database() AND table_type = 'BASE TABLE' ORDER BY 1";
+        }
+        @Override
+        public String listColumnsSql(String schema, String table) {
+            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = database() AND table_name = '"
+                    + esc(table) + "' ORDER BY ordinal_position";
+        }
+    },
+    SQLSERVER {
+        @Override
+        public String url(String host, int port, String db, String schema) {
+            return "jdbc:sqlserver://" + host + ":" + port + ";databaseName=" + db + ";encrypt=false";
+        }
+        @Override
+        public int defaultPort() { return 1433; }
+        @Override
+        public String listTablesSql(String schema) {
+            return "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' ORDER BY 1";
+        }
+        @Override
+        public String listColumnsSql(String schema, String table) {
+            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '"
+                    + esc(table) + "' ORDER BY ordinal_position";
+        }
+    },
+    ORACLE {
+        @Override
+        public String url(String host, int port, String db, String schema) {
+            return "jdbc:oracle:thin:@//" + host + ":" + port + "/" + db;
+        }
+        @Override
+        public int defaultPort() { return 1521; }
+        @Override
+        public String listTablesSql(String schema) {
+            return "SELECT table_name FROM user_tables ORDER BY 1";
+        }
+        @Override
+        public String listColumnsSql(String schema, String table) {
+            return "SELECT column_name, data_type FROM user_tab_columns WHERE table_name = '"
+                    + esc(table) + "' ORDER BY column_id";
+        }
+    };
+
+    public abstract String url(String host, int port, String db, String schema);
+    public abstract int defaultPort();
+    public abstract String listTablesSql(String schema);
+    public abstract String listColumnsSql(String schema, String table);
+
+    public static JdbcUrls of(String type) {
+        return switch (type) {
+            case "postgresql" -> POSTGRESQL;
+            case "mysql" -> MYSQL;
+            case "sqlserver" -> SQLSERVER;
+            case "oracle" -> ORACLE;
+            default -> throw new BizException(400, "不支持的数据源类型: " + type);
+        };
+    }
+
+    private static String esc(String s) {
+        return s.replace("'", "''");
+    }
+}

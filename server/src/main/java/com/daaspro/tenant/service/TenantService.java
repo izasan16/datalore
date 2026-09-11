@@ -20,13 +20,16 @@ public class TenantService {
     private final TenantMapper tenantMapper;
     private final UserMapper userMapper;
     private final SchemaProvisioner schemaProvisioner;
+    private final com.daaspro.datasource.mapper.DataSourceMapper dataSourceMapper;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     public TenantService(TenantMapper tenantMapper, UserMapper userMapper,
-                         SchemaProvisioner schemaProvisioner) {
+                         SchemaProvisioner schemaProvisioner,
+                         com.daaspro.datasource.mapper.DataSourceMapper dataSourceMapper) {
         this.tenantMapper = tenantMapper;
         this.userMapper = userMapper;
         this.schemaProvisioner = schemaProvisioner;
+        this.dataSourceMapper = dataSourceMapper;
     }
 
     public record RegisterResult(Long tenantId, Long adminUserId) {}
@@ -66,6 +69,17 @@ public class TenantService {
         admin.setRole("admin");
         admin.setStatus(1);
         userMapper.insert(admin);
+
+        // 自动注册内置数据源（指向租户数据区 schema）
+        com.daaspro.datasource.entity.DataSourceEntity builtin = new com.daaspro.datasource.entity.DataSourceEntity();
+        builtin.setTenantId(tenant.getId());
+        builtin.setName("内置数据源");
+        builtin.setType("postgresql");
+        builtin.setBuiltin(true);
+        builtin.setSchemaName(schemaName);
+        builtin.setStatus(1);
+        dataSourceMapper.insert(builtin);
+
         return new RegisterResult(tenant.getId(), admin.getId());
     }
 }
