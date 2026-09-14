@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, Outlet } from 'react-router-dom';
+import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { Layout, Menu, Typography, Button, Avatar } from '@arco-design/web-react';
 import {
   IconStorage,
@@ -24,7 +24,7 @@ interface MeInfo {
 const MENU = [
   { key: 'workspace', title: '工作台', icon: <IconHome /> },
   { key: 'datasource', title: '数据源', icon: <IconStorage /> },
-  { key: 'dataset', title: '数据集', icon: <IconCloud /> },
+  { key: 'datamanage', title: '数据管理', icon: <IconCloud /> },
   { key: 'sqllab', title: 'SQL 分析', icon: <IconCode />, disabled: true },
   { key: 'apipub', title: 'API 发布', icon: <IconCloud />, disabled: true },
   { key: 'workflow', title: '工作流', icon: <IconBranch />, disabled: true },
@@ -33,7 +33,11 @@ const MENU = [
 
 export default function WorkspaceLayout() {
   const nav = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<MeInfo | null>(null);
+  // 菜单受控高亮：取路径第一段（/datamanage/new -> datamanage）
+  const activeKey = '/' + location.pathname.split('/')[1];
+  const selectedKeys = MENU.some((m) => m.key === activeKey.slice(1)) ? [activeKey.slice(1)] : [];
 
   useEffect(() => {
     me()
@@ -62,7 +66,7 @@ export default function WorkspaceLayout() {
           daaspro
         </div>
         <Menu
-          defaultSelectedKeys={['workspace']}
+          selectedKeys={selectedKeys}
           style={{ width: '100%' }}
           onClickMenuItem={(key) => nav(`/${key}`)}
         >

@@ -4,8 +4,8 @@ import {
   Button, Card, Form, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
 } from '@arco-design/web-react';
 import { IconArrowRise, IconUpload } from '@arco-design/web-react/icon';
-import { ColumnDef, confirmDataset, listDatasetTables, uploadDataset } from '../../api/dataset';
-import { listDatasources } from '../../api/datasource';
+import { ColumnDef, confirmDataset, uploadDataset } from '../../api/dataset';
+import { listDatasources, listTables } from '../../api/datasource';
 
 const TYPE_COLOR: Record<string, string> = {
   bigint: 'arcoblue', numeric: 'cyan', text: 'gray',
@@ -28,9 +28,11 @@ export default function DatasetNewPage() {
   const [result, setResult] = useState<ParseResult | null>(null);
   const [fileRef, setFileRef] = useState<File | null>(null);
 
-  async function handleUpload(_file: File, fileList: { file: File }[]) {
-    const f = fileList[0]?.file;
-    if (!f) return;
+  async function handleUpload(f: File) {
+    if (!f) {
+      Message.warning('未读到文件，请重新选择');
+      return;
+    }
     setFileRef(f);
     setUploading(true);
     try {
@@ -89,7 +91,7 @@ export default function DatasetNewPage() {
           multiple={false}
           limit={1}
           customRequest={(option) => {
-            handleUpload(option.file as File, []);
+            handleUpload(option.file as File);
             return { abort: () => {} };
           }}
           accept=".csv,.xlsx,.xls,.txt"
@@ -158,7 +160,7 @@ function ImportForm({
 
   useEffect(() => {
     if (watchDs) {
-      listDatasetTables(watchDs)
+      listTables(watchDs)
         .then((tables) => setTableOptions(tables.map((t) => ({ value: t.name, label: t.name }))))
         .catch(() => setTableOptions([]));
     }

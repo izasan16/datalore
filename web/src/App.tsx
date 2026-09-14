@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Button, Result } from '@arco-design/web-react';
 import LoginPage from './pages/login';
 import RegisterPage from './pages/register';
 import WorkspaceLayout from './pages/workspace/Layout';
@@ -7,6 +8,21 @@ import DatasourcePage from './pages/datasource';
 import DatasourceCreatePage from './pages/datasource/create';
 import DatasetPage from './pages/dataset';
 import DatasetNewPage from './pages/dataset/new';
+
+function NotFound() {
+  return (
+    <Result
+      style={{ paddingTop: 120 }}
+      status="404"
+      title="页面不存在"
+      extra={
+        <Button type="primary" onClick={() => (window.location.href = '/workspace')}>
+          返回工作台
+        </Button>
+      }
+    />
+  );
+}
 
 export default function App() {
   return (
@@ -17,10 +33,13 @@ export default function App() {
         <Route path="/workspace" element={<WorkspacePage />} />
         <Route path="/datasource" element={<DatasourcePage />} />
         <Route path="/datasource/new" element={<DatasourceCreatePage />} />
-        <Route path="/dataset" element={<DatasetPage />} />
-        <Route path="/dataset/new" element={<DatasetNewPage />} />
+        <Route path="/datamanage" element={<DatasetPage />} />
+        <Route path="/datamanage/new" element={<DatasetNewPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/workspace" replace />} />
+      {/* 旧路径兼容 */}
+      <Route path="/dataset" element={<Navigate to="/datamanage" replace />} />
+      <Route path="/dataset/new" element={<Navigate to="/datamanage/new" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

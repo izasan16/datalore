@@ -20,7 +20,13 @@ export default function DatasourceCreatePage() {
   const [form] = Form.useForm();
 
   async function onTest() {
-    const v = await form.validate();
+    // 只校验连接相关字段，避免被未填的「名称」阻塞；校验失败 Arco 自动标红
+    let v: any;
+    try {
+      v = await form.validate(['type', 'host', 'port', 'databaseName', 'schemaName', 'username', 'password']);
+    } catch {
+      return;
+    }
     setTesting(true);
     try {
       await http.post('/datasources/test', {

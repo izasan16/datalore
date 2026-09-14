@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Card, Drawer, Message, Modal, Select, Space, Table, Tag, Tree, Typography,
+  Button, Card, Drawer, Message, Modal, Space, Spin, Table, Tag, Tree, Typography,
 } from '@arco-design/web-react';
 import { IconPlus, IconRefresh } from '@arco-design/web-react/icon';
 import {
-  ColumnDef, DatasetInfo, DatasetPreview, deleteDataset, listDatasetTables,
+  ColumnDef, DatasetInfo, DatasetPreview, deleteDataset,
   listDatasets, previewDataset,
 } from '../../api/dataset';
-import { DataSourceInfo, listDatasources } from '../../api/datasource';
+import { ColumnInfo, DataSourceInfo, listColumns, listDatasources, listTables } from '../../api/datasource';
 
-/** 数据管理：左侧数据源-表树，右侧本平台导入的数据集列表 */
+/** 数据管理：左侧数据源-表树（点击数据源懒加载其表），右侧本平台导入的数据集列表 */
 export default function DatasetPage() {
   const nav = useNavigate();
   const [list, setList] = useState<DatasetInfo[]>([]);
@@ -20,10 +20,12 @@ export default function DatasetPage() {
 
   // 左侧树
   const [dsList, setDsList] = useState<DataSourceInfo[]>([]);
-  const [selectedDs, setSelectedDs] = useState<DataSourceInfo | null>(null);
-  const [tables, setTables] = useState<{ name: string }[]>([]);
-  const [columns, setColumns] = useState<ColumnDef[] | null>(null);
-  const [colTable, setColTable] = useState<string>('');
+  const [tablesByDs, setTablesByDs] = useState<Record<number, { name: string }[]>>({});
+  const [loadingDs, setLoadingDs] = useState<number | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string>('');
+  const [columns, setColumns] = useState<ColumnDef[] | ColumnInfo[] | null>(null);
+  const [colLabel, setColLabel] = useState<string>('');
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -38,15 +40,10 @@ export default function DatasetPage() {
 
   const loadDatasources = useCallback(async () => {
     try {
-      const list = await listDatasources();
-      setDsList(list);
-      if (list.length > 0 && !selectedDs) {
-        pickDatasource(list[0]);
-      }
+      setDsList(await listDatasources());
     } catch (e: any) {
       Message.error(e.response?.data?.message || '数据源加载失败');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -54,33 +51,66 @@ export default function DatasetPage() {
     loadDatasources();
   }, [reload, loadDatasources]);
 
-  async function pickDatasource(ds: DataSourceInfo) {
-    setSelectedDs(ds);
-    setColumns(null);
-    setColTable('');
+  async function loadTablesOf(ds: DataSourceInfo) {
+    if (tablesByDs[ds.id]) return;
+    setLoadingDs(ds.id);
     try {
-      setTables(await listDatasetTables(ds.id));
+      const tables = await listTables(ds.id);
+      setTablesByDs((prev) => ({ ...prev, [ds.id]: tables }));
     } catch (e: any) {
-      Message.error(e.response?.data?.message || '读取表列表失败');
-      setTables([]);
+      Message.error(e.response?.data?.message || `读取「${ds.name}」表列表失败`);
+      setTablesByDs((prev) => ({ ...prev, [ds.id]: [] }));
+    } finally {
+      setLoadingDs(null);
     }
   }
 
-  async function pickTable(t: string) {
-    if (!selectedDs) return;
-    setColTable(t);
-    setColumns(null);
-    try {
-      setColumns(await previewColumns(selectedDs.id, t));
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '读取列信息失败');
+  function dsTitle(ds: DataSourceInfo) {
+    return (
+      <Space size={6}>
+        {ds.name}
+        {ds.builtin ? <Tag size="small" color="arcoblue">内置</Tag> : <Tag size="small">{ds.type}</Tag>}
+        {loadingDs === ds.id && <Spin size={12} />}
+      </Space>
+    );
+  }
+
+  function onTreeSelect(keys: any) {
+    const key: string = String(keys?.[0] || '');
+    if (!key) return;
+    setSelectedKey(key);
+    if (key.startsWith('ds-')) {
+      const ds = dsList.find((d) => d.id === Number(key.slice(3)));
+      if (!ds) return;
+      setColumns(null);
+      setColLabel('');
+      setExpandedKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+      loadTablesOf(ds);
+    } else if (key.startsWith('tb-')) {
+      // tb-{dsId}-{table}，table 名本身可含 '-'，用第一个 '-' 分割
+      const rest = key.slice(3);
+      const sep = rest.indexOf('-');
+      const dsId = Number(rest.slice(0, sep));
+      const table = rest.slice(sep + 1);
+      const ds = dsList.find((d) => d.id === dsId);
+      if (!ds) return;
+      setColLabel(`${ds.name} · ${table}`);
+      setColumns(null);
+      listColumns(dsId, table)
+        .then(setColumns)
+        .catch((e: any) => Message.error(e.response?.data?.message || '读取列信息失败'));
     }
   }
 
-  async function previewColumns(id: number, table: string): Promise<ColumnDef[]> {
-    const { http } = await import('../../api/http');
-    return http.get(`/datasources/${id}/tables/${table}/columns`).then((r) => r.data);
-  }
+  const treeData = dsList.map((ds) => ({
+    key: `ds-${ds.id}`,
+    title: dsTitle(ds),
+    children: (tablesByDs[ds.id] || []).map((t) => ({
+      key: `tb-${ds.id}-${t.name}`,
+      title: t.name,
+      isLeaf: true,
+    })),
+  }));
 
   async function openPreview(d: DatasetInfo) {
     try {
@@ -109,54 +139,36 @@ export default function DatasetPage() {
     });
   }
 
-  const treeData = dsList.map((ds) => ({
-    key: `ds-${ds.id}`,
-    title: (
-      <Space>
-        {ds.name}
-        {ds.builtin ? <Tag size="small" color="arcoblue">内置</Tag> : <Tag size="small">{ds.type}</Tag>}
-      </Space>
-    ),
-    children: tables.map((t) => ({ key: `tb-${t.name}`, title: t.name })),
-  }));
-
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
       <Card
         title="数据源与表"
-        style={{ width: 320, flexShrink: 0 }}
+        style={{ width: 340, flexShrink: 0 }}
         extra={
-          <Select
-            size="mini"
-            style={{ width: 110 }}
-            value={selectedDs?.id}
-            onChange={(v) => {
-              const ds = dsList.find((d) => d.id === v);
-              if (ds) pickDatasource(ds);
-            }}
-            options={dsList.map((d) => ({ value: d.id, label: d.name }))}
-          />
+          <Button size="mini" icon={<IconRefresh />} onClick={() => {
+            setTablesByDs({});
+            loadDatasources();
+          }} />
         }
       >
-        {selectedDs ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+          点击数据源加载其表，点击表名查看列结构
+        </Typography.Text>
+        {treeData.length > 0 ? (
           <Tree
-            {...({
-              treeData,
-              defaultExpandAll: true,
-              selectedKeys: colTable ? [`tb-${colTable}`] : [],
-              onSelect: (keys: any) => {
-                const key = String(keys?.[0] || '');
-                if (key.startsWith('tb-')) pickTable(key.slice(3));
-              },
-            } as any)}
+            treeData={treeData as any}
+            expandedKeys={expandedKeys}
+            onExpand={(keys: any) => setExpandedKeys(keys.map(String))}
+            selectedKeys={selectedKey ? [selectedKey] : []}
+            onSelect={onTreeSelect}
           />
         ) : (
           <Typography.Text type="secondary">暂无数据源</Typography.Text>
         )}
         {columns && (
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, borderTop: '1px solid var(--color-border-2)', paddingTop: 12 }}>
             <Typography.Title heading={6} style={{ marginTop: 0 }}>
-              列结构 · {colTable}
+              列结构 · {colLabel}
             </Typography.Title>
             {columns.map((c) => (
               <div key={c.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
