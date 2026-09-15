@@ -8,6 +8,7 @@ import DatasourcePage from './pages/datasource';
 import DatasourceCreatePage from './pages/datasource/create';
 import DatasetPage from './pages/dataset';
 import DatasetNewPage from './pages/dataset/new';
+import SqlLabPage from './pages/sqllab';
 
 function NotFound() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/datasource/new" element={<DatasourceCreatePage />} />
         <Route path="/datamanage" element={<DatasetPage />} />
         <Route path="/datamanage/new" element={<DatasetNewPage />} />
+        <Route path="/sqllab" element={<SqlLabPage />} />
       </Route>
       {/* 旧路径兼容 */}
       <Route path="/dataset" element={<Navigate to="/datamanage" replace />} />

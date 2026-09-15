@@ -25,7 +25,7 @@ const MENU = [
   { key: 'workspace', title: '工作台', icon: <IconHome /> },
   { key: 'datasource', title: '数据源', icon: <IconStorage /> },
   { key: 'datamanage', title: '数据管理', icon: <IconCloud /> },
-  { key: 'sqllab', title: 'SQL 分析', icon: <IconCode />, disabled: true },
+  { key: 'sqllab', title: 'SQL 分析', icon: <IconCode /> },
   { key: 'apipub', title: 'API 发布', icon: <IconCloud />, disabled: true },
   { key: 'workflow', title: '工作流', icon: <IconBranch />, disabled: true },
   { key: 'settings', title: '设置', icon: <IconSettings />, disabled: true },
