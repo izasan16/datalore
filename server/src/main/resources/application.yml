@@ -29,6 +29,9 @@ daaspro:
     access-key: daaspro
     secret-key: daaspro_dev_2026
     bucket: daaspro-staging
+  sql:
+    max-rows: 10000      # SQL 网关单次结果行数上限
+    max-seconds: 30      # SQL 网关语句超时（秒）
 
 sa-token:
   token-name: Authorization
