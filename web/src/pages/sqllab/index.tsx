@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Editor } from '@monaco-editor/react';
 import '../../monacoSetup';
 import {
-  Button, Card, Input, Message, Popconfirm, Select, Space, Spin, Table, Tag, Typography,
+  Button, Card, Input, Message, Modal, Select, Space, Spin, Table, Tag, Typography,
 } from '@arco-design/web-react';
 import {
   IconDelete, IconDownload, IconPlayArrow, IconPlus, IconSave,
@@ -15,12 +15,16 @@ export default function SqlLabPage() {
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [content, setContent] = useState('select 1;');
+  const [baseline, setBaseline] = useState({ name: '', content: 'select 1;' });
   const [dsList, setDsList] = useState<DataSourceInfo[]>([]);
   const [datasourceId, setDatasourceId] = useState<number | undefined>();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState('');
   const runRef = useRef<() => void>(() => {});
+  const saveRef = useRef<() => void>(() => {});
+
+  const dirty = name !== baseline.name || content !== baseline.content;
 
   useEffect(() => {
     listScripts().then(setScripts).catch(() => {});
@@ -54,56 +58,87 @@ export default function SqlLabPage() {
   }
   runRef.current = run;
 
-  function newScript() {
-    setCurrentId(null);
-    setName('');
-    setContent('');
-    setResult(null);
-    setError('');
-  }
-
-  async function openScript(s: SqlScriptInfo) {
-    try {
-      const d = await getScript(s.id);
-      setCurrentId(d.id);
-      setName(d.name);
-      setContent(d.content);
-      setResult(null);
-      setError('');
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '加载脚本失败');
-    }
-  }
-
   async function save() {
+    const n = name.trim();
+    if (!n) {
+      Message.warning('请先填写脚本名称');
+      return;
+    }
     try {
       if (currentId == null) {
-        if (!name.trim()) {
-          Message.warning('请先在上方输入脚本名称');
-          return;
-        }
-        const r = await createScript(name.trim(), content);
+        const r = await createScript(n, content);
         setCurrentId(r.id);
-        Message.success('脚本已保存');
-        reloadScripts();
       } else {
-        await updateScript(currentId, name.trim() || undefined, content);
-        Message.success('已保存');
-        reloadScripts();
+        await updateScript(currentId, n, content);
       }
+      setBaseline({ name: n, content });
+      Message.success('已保存');
+      reloadScripts();
     } catch (e: any) {
       Message.error(e.response?.data?.message || '保存失败');
     }
   }
+  saveRef.current = save;
 
-  async function removeScript(s: SqlScriptInfo) {
-    try {
-      await deleteScript(s.id);
-      if (currentId === s.id) newScript();
-      reloadScripts();
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '删除失败');
+  /** 有未保存修改时先确认，再执行切换动作 */
+  function guardUnsaved(action: () => void) {
+    if (!dirty) {
+      action();
+      return;
     }
+    Modal.confirm({
+      title: '有未保存的修改',
+      content: '切换后当前编辑内容将被丢弃，确定继续吗？也可以先点「保存」。',
+      okText: '放弃修改并切换',
+      cancelText: '留在当前',
+      okButtonProps: { status: 'warning' },
+      onOk: action,
+    });
+  }
+
+  function newScript() {
+    guardUnsaved(() => {
+      setCurrentId(null);
+      setName('');
+      setContent('');
+      setBaseline({ name: '', content: '' });
+      setResult(null);
+      setError('');
+    });
+  }
+
+  async function openScript(s: SqlScriptInfo) {
+    if (s.id === currentId) return;
+    guardUnsaved(async () => {
+      try {
+        const d = await getScript(s.id);
+        setName(d.name);
+        setContent(d.content);
+        setBaseline({ name: d.name, content: d.content });
+        setCurrentId(d.id);
+        setResult(null);
+        setError('');
+      } catch (e: any) {
+        Message.error(e.response?.data?.message || '加载脚本失败');
+      }
+    });
+  }
+
+  function confirmDelete(s: SqlScriptInfo) {
+    Modal.confirm({
+      title: '删除脚本',
+      content: `确定删除「${s.name}」吗？`,
+      okButtonProps: { status: 'danger' },
+      onOk: async () => {
+        try {
+          await deleteScript(s.id);
+          if (currentId === s.id) newScript();
+          reloadScripts();
+        } catch (e: any) {
+          Message.error(e.response?.data?.message || '删除失败');
+        }
+      },
+    });
   }
 
   function exportCsv() {
@@ -113,7 +148,7 @@ export default function SqlLabPage() {
       result.columns.map(esc).join(','),
       ...result.rows.map((row) => row.map(esc).join(',')),
     ];
-    const blob = new Blob(['' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${(name || 'query').replace(/[\\/:*?"<>|]/g, '_')}.csv`;
@@ -124,8 +159,9 @@ export default function SqlLabPage() {
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
       <Card
-        title="我的脚本"
-        style={{ width: 240, flexShrink: 0 }}
+        title="脚本"
+        style={{ width: 250, flexShrink: 0 }}
+        bodyStyle={{ padding: '4px 0' }}
         extra={
           <Button size="mini" type="primary" icon={<IconPlus />} onClick={newScript}>
             新建
@@ -133,28 +169,45 @@ export default function SqlLabPage() {
         }
       >
         {scripts.length === 0 ? (
-          <Typography.Text type="secondary">还没有保存的脚本</Typography.Text>
+          <Typography.Text type="secondary" style={{ display: 'block', padding: '8px 16px' }}>
+            还没有脚本，点「新建」开始
+          </Typography.Text>
         ) : (
-          scripts.map((s) => (
-            <div
-              key={s.id}
-              onClick={() => openScript(s)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 6px', cursor: 'pointer', borderRadius: 6,
-                background: currentId === s.id ? 'var(--color-primary-light-1)' : undefined,
-                color: currentId === s.id ? 'var(--daaspro-primary)' : undefined,
-                fontWeight: currentId === s.id ? 600 : 400,
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {s.name}
-              </span>
-              <Popconfirm title="删除该脚本？" onOk={() => removeScript(s)}>
-                <IconDelete style={{ color: 'var(--color-text-3)' }} onClick={(e) => e.stopPropagation()} />
-              </Popconfirm>
-            </div>
-          ))
+          scripts.map((s) => {
+            const selected = s.id === currentId;
+            return (
+              <div
+                key={s.id}
+                className={`script-item${selected ? ' selected' : ''}`}
+                style={{
+                  background: selected ? 'var(--color-primary-light-1)' : undefined,
+                }}
+                onClick={() => openScript(s)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span
+                    style={{
+                      flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: selected ? 'var(--daaspro-primary)' : undefined,
+                      fontWeight: selected ? 600 : 400,
+                    }}
+                  >
+                    {s.name}
+                    {selected && dirty && (
+                      <span style={{ color: 'rgb(var(--orange-6))', marginLeft: 4 }} title="有未保存的修改">●</span>
+                    )}
+                  </span>
+                  <IconDelete
+                    className="script-item-del"
+                    onClick={(e) => { e.stopPropagation(); confirmDelete(s); }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-3)' }}>
+                  {s.updatedAt.replace('T', ' ').slice(5, 16)}
+                </div>
+              </div>
+            );
+          })
         )}
       </Card>
 
@@ -163,8 +216,9 @@ export default function SqlLabPage() {
           <Input
             value={name}
             onChange={setName}
-            placeholder="脚本名称（保存用）"
+            placeholder="脚本名称"
             style={{ width: 220 }}
+            status={dirty && !name.trim() ? 'warning' : undefined}
           />
           <Select
             style={{ width: 200 }}
@@ -173,20 +227,21 @@ export default function SqlLabPage() {
             placeholder="选择数据源"
             options={dsList.map((d) => ({
               value: d.id,
-              label: d.builtin ? `${d.name}（内置，可写）` : `${d.name}（${d.type}，只读）`,
+              label: d.builtin ? `${d.name}（内置，可写入）` : `${d.name}（${d.type}，只读）`,
             }))}
           />
           <Button type="primary" icon={<IconPlayArrow />} loading={running} onClick={() => runRef.current()}>
             运行 (Ctrl+Enter)
           </Button>
-          <Button icon={<IconSave />} onClick={save}>
-            保存
+          <Button icon={<IconSave />} onClick={() => saveRef.current()}>
+            保存 (Ctrl+S)
           </Button>
           {result?.isQuery && (
             <Button icon={<IconDownload />} onClick={exportCsv}>
               导出 CSV
             </Button>
           )}
+          {dirty ? <Tag color="orange">未保存</Tag> : currentId != null ? <Tag color="green">已保存</Tag> : null}
         </Space>
 
         <div style={{ border: '1px solid var(--color-border-2)', borderRadius: 8, overflow: 'hidden' }}>
@@ -195,9 +250,9 @@ export default function SqlLabPage() {
             language="sql"
             value={content}
             onChange={(v) => setContent(v ?? '')}
-            loading={<Spin style={{ margin: 40 }} />}
             onMount={(editor, monaco) => {
               editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => runRef.current());
+              editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current());
             }}
             options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false }}
           />

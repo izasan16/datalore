@@ -188,6 +188,34 @@ body,
   }
 }
 
+/* ---------- SQL Lab 脚本列表项 ---------- */
+
+.script-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.2s;
+}
+
+.script-item:hover {
+  background: var(--color-fill-2);
+}
+
+.script-item.selected {
+  border-left-color: var(--daaspro-primary);
+}
+
+.script-item .script-item-del {
+  color: var(--color-text-3);
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex: none;
+}
+
+.script-item:hover .script-item-del {
+  opacity: 1;
+}
+
 /* ---------- 工作台微调 ---------- */
 
 .ws-sider-logo {
