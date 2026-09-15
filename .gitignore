@@ -8,3 +8,7 @@ web/node_modules/
 .vscode/
 .env
 logs/
+.zcode/
+tmp-server.log
+tmp-server-err.log
+tmp-vite.log
