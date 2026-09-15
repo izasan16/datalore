@@ -109,9 +109,10 @@ class DatasetFlowTest {
         Map<String, Object> first = doImport(token, csv1, "追加测试" + System.currentTimeMillis(), null);
         String table = (String) first.get("tableName");
 
-        // 第二次同结构文件追加
+        // 第二次同结构文件追加：应合并进第一个数据集（不新建记录，避免共享物理表被连坐删除）
         String csv2 = "名称,数量\n丙,30\n";
-        doImport(token, csv2, "追加批次" + System.currentTimeMillis(), table);
+        Map<String, Object> second = doImport(token, csv2, "追加批次" + System.currentTimeMillis(), table);
+        assertThat(((Number) second.get("id")).longValue()).isEqualTo(((Number) first.get("id")).longValue());
 
         // 预览第一批：表里现在应该有 3 行（preview LIMIT 20 覆盖全部）
         var preview = rest().exchange(url("/api/datasets/" + ((Number) first.get("id")).longValue() + "/preview"),

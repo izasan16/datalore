@@ -93,7 +93,10 @@ public class DatasetService {
         if (req.types().stream().anyMatch(t -> !ALLOWED_TYPES.contains(t))) {
             throw new BizException(400, "列类型非法");
         }
-        if (req.name() == null || req.name().isBlank()) throw new BizException(400, "数据集名称不能为空");
+        boolean append0 = req.existingTable() != null && !req.existingTable().isBlank();
+        if (!append0 && (req.name() == null || req.name().isBlank())) {
+            throw new BizException(400, "数据集名称不能为空");
+        }
 
         DataSourceEntity target;
         if (req.datasourceId == null) {
@@ -107,10 +110,12 @@ public class DatasetService {
         // 追加只对内置源有意义；未传 datasourceId 时也允许 append（默认内置源）
         boolean append = req.existingTable() != null && !req.existingTable().isBlank();
 
-        Long dup = mapper.selectCount(new LambdaQueryWrapper<DatasetEntity>()
-                .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
-                .eq(DatasetEntity::getName, req.name()));
-        if (dup > 0) throw new BizException(400, "同名数据集已存在");
+        if (!append) {
+            Long dup = mapper.selectCount(new LambdaQueryWrapper<DatasetEntity>()
+                    .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
+                    .eq(DatasetEntity::getName, req.name()));
+            if (dup > 0) throw new BizException(400, "同名数据集已存在");
+        }
 
         byte[] csv = download(req.uploadId());
         String table;
@@ -128,20 +133,29 @@ public class DatasetService {
                 throw new BizException(400, "列与目标表不一致。目标表列: " + actualNames);
             }
             copyCount = copyInto(target, table, columns, csv, true);
-        } else {
-            table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-            copyCount = createTableAndCopy(target, table, columns, types, csv);
+            // 追加到已有数据集：只更新其行数，不新建记录（否则删除任一条会连坐共享物理表）
+            DatasetEntity existing = mapper.selectList(new LambdaQueryWrapper<DatasetEntity>()
+                            .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
+                            .eq(DatasetEntity::getTableName, table))
+                    .stream().findFirst().orElse(null);
+            if (existing != null) {
+                existing.setRowCount(countRows(target, table));
+                mapper.updateById(existing);
+                return existing;
+            }
+            // 目标表不是本平台数据集：拒绝，避免一张表挂两条记录
+            throw new BizException(400, "目标表不属于任何数据集，无法以追加方式管理");
         }
+
+        table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        copyCount = createTableAndCopy(target, table, columns, types, csv);
 
         DatasetEntity ds = new DatasetEntity();
         ds.setTenantId(TenantContext.requireTenantId());
         ds.setName(req.name());
         ds.setTableName(table);
         ds.setDatasourceId(target.getId());
-        List<Map<String, String>> actualCols = append ? tableColumns(target, table) : null;
-        List<String> finalCols = append ? actualCols.stream().map(c -> c.get("name")).toList() : columns;
-        List<String> finalTypes = append ? actualCols.stream().map(c -> c.get("type")).toList() : types;
-        ds.setColumnsDef(toColumnsJson(finalCols, finalTypes));
+        ds.setColumnsDef(toColumnsJson(columns, types));
         ds.setFileName(req.fileName());
         ds.setRowCount(copyCount);
         mapper.insert(ds);
@@ -208,6 +222,17 @@ public class DatasetService {
             throw e;
         } catch (Exception e) {
             throw new BizException(400, "读取表结构失败: " + DataSourceService.rootMessage(e));
+        }
+    }
+
+    /** 表实际行数（追加后刷新数据集计数用）。 */
+    private long countRows(DataSourceEntity ds, String table) {
+        try (Connection conn = openConnection(ds);
+             var st = conn.prepareStatement("SELECT count(*) FROM " + quote(table));
+             var rs = st.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0;
+        } catch (Exception e) {
+            throw new BizException(400, "统计行数失败: " + DataSourceService.rootMessage(e));
         }
     }
 

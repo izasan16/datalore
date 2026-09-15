@@ -200,8 +200,13 @@ function ImportForm({
         style={{ marginTop: 24, maxWidth: 420 }}
         initialValues={{ mode: 'new', name: defaultName } as any}
       >
-        <Form.Item label="数据名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
-          <Input placeholder="如：销售明细" />
+        <Form.Item
+          label="数据名称"
+          field="name"
+          rules={mode === 'append' ? [] : [{ required: true, message: '请输入名称' }]}
+          extra={mode === 'append' ? '追加到已有数据集，将更新其行数，无需新名称' : undefined}
+        >
+          <Input placeholder="如：销售明细" disabled={mode === 'append'} />
         </Form.Item>
         <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
           <Select
