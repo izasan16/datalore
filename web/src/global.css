@@ -188,6 +188,40 @@ body,
   }
 }
 
+/* ---------- 页面布局工具类（应用壳固定 + 页面内 flex 分配） ---------- */
+
+.page-fill {
+  height: 100%;
+  display: flex;
+  gap: 16px;
+}
+
+.page-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scroll-y {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Arco Card 作为 flex 列时，让 body 吃掉剩余高度 */
+.card-fill {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.card-fill > .arco-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ---------- SQL Lab 脚本列表项 ---------- */
 
 .script-item {

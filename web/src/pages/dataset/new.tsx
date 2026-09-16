@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Card, Form, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
+  Button, Card, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
 } from '@arco-design/web-react';
 import { IconArrowRise, IconUpload } from '@arco-design/web-react/icon';
 import { ColumnDef, confirmDataset, uploadDataset } from '../../api/dataset';
 import { listDatasources, listTables } from '../../api/datasource';
+
+const { Row, Col } = Grid;
 
 const TYPE_COLOR: Record<string, string> = {
   bigint: 'arcoblue', numeric: 'cyan', text: 'gray',
@@ -77,7 +79,7 @@ export default function DatasetNewPage() {
   return (
     <Card
       title="上传数据"
-      style={{ maxWidth: 880 }}
+      style={{ maxWidth: 880, margin: '0 auto' }}
       extra={<Button type="text" onClick={() => nav('/datamanage')}>返回</Button>}
     >
       <Steps current={step} style={{ marginBottom: 28 }}>
@@ -98,7 +100,7 @@ export default function DatasetNewPage() {
           showUploadList={false}
           disabled={uploading}
         >
-          <div style={{ textAlign: 'center', padding: '56px 0' }}>
+          <div style={{ textAlign: 'center', padding: '72px 0' }}>
             <div style={{ marginBottom: 16 }}>
               <IconUpload style={{ fontSize: 40, color: 'var(--daaspro-primary)' }} />
             </div>
@@ -197,45 +199,55 @@ function ImportForm({
         form={form}
         onSubmit={onConfirm}
         layout="vertical"
-        style={{ marginTop: 24, maxWidth: 420 }}
+        style={{ marginTop: 24 }}
         initialValues={{ mode: 'new', name: defaultName } as any}
       >
-        <Form.Item
-          label="数据名称"
-          field="name"
-          rules={mode === 'append' ? [] : [{ required: true, message: '请输入名称' }]}
-          extra={mode === 'append' ? '追加到已有数据集，将更新其行数，无需新名称' : undefined}
-        >
-          <Input placeholder="如：销售明细" disabled={mode === 'append'} />
-        </Form.Item>
-        <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
-          <Select
-            options={dsOptions}
-            onChange={(v) => {
-              setWatchDs(v as number);
-              form.setFieldValue('existingTable', undefined);
-            }}
-          />
-        </Form.Item>
-        <Form.Item label="导入方式" field="mode">
-          <Select
-            onChange={(v) => setMode(v as 'new' | 'append')}
-            options={[
-              { value: 'new', label: '新建表' },
-              { value: 'append', label: '追加到已有表' },
-            ]}
-          />
-        </Form.Item>
-        {mode === 'append' && (
-          <Form.Item
-            label="目标表"
-            field="existingTable"
-            rules={[{ required: true, message: '请选择目标表' }]}
-            extra="目标表列名需与上传文件表头完全一致"
-          >
-            <Select options={tableOptions} placeholder="选择已有表" showSearch />
-          </Form.Item>
-        )}
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              label="数据名称"
+              field="name"
+              rules={mode === 'append' ? [] : [{ required: true, message: '请输入名称' }]}
+              extra={mode === 'append' ? '追加到已有数据集，将更新其行数，无需新名称' : undefined}
+            >
+              <Input placeholder="如：销售明细" disabled={mode === 'append'} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
+              <Select
+                options={dsOptions}
+                onChange={(v) => {
+                  setWatchDs(v as number);
+                  form.setFieldValue('existingTable', undefined);
+                }}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="导入方式" field="mode">
+              <Select
+                onChange={(v) => setMode(v as 'new' | 'append')}
+                options={[
+                  { value: 'new', label: '新建表' },
+                  { value: 'append', label: '追加到已有表' },
+                ]}
+              />
+            </Form.Item>
+          </Col>
+          {mode === 'append' && (
+            <Col span={12}>
+              <Form.Item
+                label="目标表"
+                field="existingTable"
+                rules={[{ required: true, message: '请选择目标表' }]}
+                extra="目标表列名需与上传文件表头完全一致"
+              >
+                <Select options={tableOptions} placeholder="选择已有表" showSearch />
+              </Form.Item>
+            </Col>
+          )}
+        </Row>
         <Space style={{ marginTop: 8 }}>
           <Button onClick={onReset}>重新选择文件</Button>
           <Button type="primary" htmlType="submit" loading={importing} icon={<IconArrowRise />}>

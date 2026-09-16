@@ -93,6 +93,8 @@ export default function DatasourcePage() {
   return (
     <Card
       title="数据源"
+      className="card-fill"
+      style={{ height: '100%' }}
       extra={
         <Space>
           <Button icon={<IconRefresh />} onClick={reload} />
@@ -102,41 +104,48 @@ export default function DatasourcePage() {
         </Space>
       }
     >
-      <Table
-        loading={loading}
-        data={list}
-        rowKey="id"
-        pagination={false}
-        columns={[
-          {
-            title: '名称', dataIndex: 'name',
-            render: (v: string, row: DataSourceInfo) => (
-              <Space>
-                {v}
-                {row.builtin && <Tag color="arcoblue" size="small">内置</Tag>}
-              </Space>
-            ),
-          },
-          { title: '类型', dataIndex: 'type', width: 130, render: (t: string) => TYPE_LABEL[t] || t },
-          {
-            title: '连接', dataIndex: 'host', width: 240,
-            render: (_: string, row: DataSourceInfo) =>
-              row.builtin ? `平台内置 · ${row.schemaName}` : `${row.host}:${row.port}/${row.databaseName}`,
-          },
-          {
-            title: '操作', width: 240,
-            render: (_: unknown, row: DataSourceInfo) => (
-              <Space>
-                <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
-                <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
-                {!row.builtin && (
-                  <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
+      <div className="scroll-y">
+        <Table
+          loading={loading}
+          data={list}
+          rowKey="id"
+          pagination={false}
+          columns={[
+            {
+              title: '名称', dataIndex: 'name',
+              render: (v: string, row: DataSourceInfo) => (
+                <Space>
+                  {v}
+                  {row.builtin && <Tag color="arcoblue" size="small">内置</Tag>}
+                </Space>
+              ),
+            },
+            { title: '类型', dataIndex: 'type', width: 130, render: (t: string) => TYPE_LABEL[t] || t },
+            {
+              title: '连接', dataIndex: 'host', width: 240,
+              render: (_: string, row: DataSourceInfo) =>
+                row.builtin ? `平台内置 · ${row.schemaName}` : `${row.host}:${row.port}/${row.databaseName}`,
+            },
+            {
+              title: '操作', width: 240,
+              render: (_: unknown, row: DataSourceInfo) => (
+                <Space>
+                  <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
+                  <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
+                  {!row.builtin && (
+                    <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
+                  )}
+                </Space>
+              ),
+            },
+          ]}
+        />
+        {list.length === 0 && !loading && (
+          <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
+            还没有数据源，点右上角「新建数据源」接入外部库
+          </Typography.Text>
+        )}
+      </div>
 
       <Drawer
         title={browseDs ? `表浏览 · ${browseDs.name}` : ''}

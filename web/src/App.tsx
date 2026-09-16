@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Button, Result } from '@arco-design/web-react';
 import LoginPage from './pages/login';
 import RegisterPage from './pages/register';
@@ -11,17 +11,19 @@ import DatasetNewPage from './pages/dataset/new';
 import SqlLabPage from './pages/sqllab';
 
 function NotFound() {
+  const nav = useNavigate();
   return (
-    <Result
-      style={{ paddingTop: 120 }}
-      status="404"
-      title="页面不存在"
-      extra={
-        <Button type="primary" onClick={() => (window.location.href = '/workspace')}>
-          返回工作台
-        </Button>
-      }
-    />
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Result
+        status="404"
+        title="页面不存在"
+        extra={
+          <Button type="primary" onClick={() => nav('/workspace')}>
+            返回工作台
+          </Button>
+        }
+      />
+    </div>
   );
 }
 

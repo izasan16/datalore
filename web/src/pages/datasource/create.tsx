@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Form, Input, InputNumber, Message, Select, Space } from '@arco-design/web-react';
+import { Button, Card, Form, Grid, Input, InputNumber, Message, Select, Space } from '@arco-design/web-react';
 import { createDatasource } from '../../api/datasource';
 import { http } from '../../api/http';
+
+const { Row, Col } = Grid;
 
 const TYPE_LABEL: Record<string, string> = {
   postgresql: 'PostgreSQL',
@@ -67,38 +69,56 @@ export default function DatasourceCreatePage() {
   return (
     <Card
       title="新建数据源"
-      style={{ maxWidth: 640 }}
+      style={{ maxWidth: 720, margin: '0 auto' }}
       extra={
-        <Button onClick={() => nav('/datasource')} type="text">
+        <Button type="text" onClick={() => nav('/datasource')}>
           返回列表
         </Button>
       }
     >
-      <Form form={form} onSubmit={onSubmit} layout="vertical" className="auth-form">
-        <Form.Item label="名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
-          <Input placeholder="如：业务库" />
-        </Form.Item>
-        <Form.Item label="类型" field="type" initialValue="postgresql" rules={[{ required: true, message: '请选择类型' }]}>
-          <Select options={TYPE_OPTIONS} />
-        </Form.Item>
-        <Form.Item label="主机" field="host" rules={[{ required: true, message: '请输入主机' }]}>
-          <Input placeholder="如：192.168.1.10" />
-        </Form.Item>
-        <Form.Item label="端口（留空用默认）" field="port">
-          <InputNumber placeholder="默认端口自动填" style={{ width: '100%' }} />
-        </Form.Item>
-        <Form.Item label="数据库" field="databaseName" rules={[{ required: true, message: '请输入数据库名' }]}>
-          <Input placeholder="database" />
-        </Form.Item>
-        <Form.Item label="Schema（PG 可选）" field="schemaName">
-          <Input placeholder="public" />
-        </Form.Item>
-        <Form.Item label="用户名" field="username" rules={[{ required: true, message: '请输入用户名' }]}>
-          <Input placeholder="用户名" />
-        </Form.Item>
-        <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
-          <Input.Password placeholder="密码" />
-        </Form.Item>
+      <Form form={form} onSubmit={onSubmit} layout="vertical" initialValues={{ type: 'postgresql' }}>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
+              <Input placeholder="如：业务库" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="类型" field="type" rules={[{ required: true, message: '请选择类型' }]}>
+              <Select options={TYPE_OPTIONS} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="主机" field="host" rules={[{ required: true, message: '请输入主机' }]}>
+              <Input placeholder="如：192.168.1.10" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="端口（留空用默认）" field="port">
+              <InputNumber placeholder="默认端口自动填" style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="数据库" field="databaseName" rules={[{ required: true, message: '请输入数据库名' }]}>
+              <Input placeholder="database" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="Schema（PG 可选）" field="schemaName">
+              <Input placeholder="public" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="用户名" field="username" rules={[{ required: true, message: '请输入用户名' }]}>
+              <Input placeholder="用户名" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
+              <Input.Password placeholder="密码" />
+            </Form.Item>
+          </Col>
+        </Row>
         <Space style={{ marginTop: 8 }}>
           <Button onClick={onTest} loading={testing}>
             测试连接

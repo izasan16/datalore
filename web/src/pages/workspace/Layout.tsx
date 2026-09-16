@@ -59,8 +59,8 @@ export default function WorkspaceLayout() {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={216} style={{ background: '#fff', borderRight: '1px solid var(--color-border-2)' }}>
+    <Layout style={{ height: '100vh' }}>
+      <Sider width={216} style={{ background: '#fff', borderRight: '1px solid var(--color-border-2)', overflowY: 'auto' }}>
         <div className="ws-sider-logo">
           <LogoMark size={28} />
           daaspro
@@ -108,7 +108,7 @@ export default function WorkspaceLayout() {
             退出
           </Button>
         </Header>
-        <Content style={{ padding: 20, background: 'var(--color-fill-1)' }}>
+        <Content style={{ padding: 20, background: 'var(--color-fill-1)', overflow: 'auto' }}>
           <Outlet context={user} />
         </Content>
       </Layout>

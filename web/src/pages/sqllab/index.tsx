@@ -23,8 +23,24 @@ export default function SqlLabPage() {
   const [error, setError] = useState('');
   const runRef = useRef<() => void>(() => {});
   const saveRef = useRef<() => void>(() => {});
+  const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  // Monaco 在百分比高度容器里测不到尺寸（会塌成 5px），用视口像素高兜底
+  const editorH = Math.round(Math.min(260, Math.max(140, window.innerHeight * 0.38)));
 
   const dirty = name !== baseline.name || content !== baseline.content;
+
+  // automaticLayout 在该 webview 内不生效：挂载后与窗口变化时手动重新测量
+  useEffect(() => {
+    const relayout = () => editorRef.current?.layout();
+    const t1 = window.setTimeout(relayout, 50);
+    const t2 = window.setTimeout(relayout, 300);
+    window.addEventListener('resize', relayout);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener('resize', relayout);
+    };
+  }, [editorH]);
 
   useEffect(() => {
     listScripts().then(setScripts).catch(() => {});
@@ -157,11 +173,12 @@ export default function SqlLabPage() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+    <div className="page-fill">
       <Card
         title="脚本"
+        className="card-fill"
         style={{ width: 250, flexShrink: 0 }}
-        bodyStyle={{ padding: '4px 0' }}
+        bodyStyle={{ padding: '4px 0', overflowY: 'auto' }}
         extra={
           <Button size="mini" type="primary" icon={<IconPlus />} onClick={newScript}>
             新建
@@ -211,8 +228,8 @@ export default function SqlLabPage() {
         )}
       </Card>
 
-      <Card style={{ flex: 1, minWidth: 0 }} bodyStyle={{ padding: 12 }}>
-        <Space style={{ marginBottom: 10 }} wrap>
+      <Card className="card-fill" style={{ flex: 1, minWidth: 0 }} bodyStyle={{ padding: 12 }}>
+        <Space style={{ marginBottom: 10, flexShrink: 0 }} wrap>
           <Input
             value={name}
             onChange={setName}
@@ -244,60 +261,77 @@ export default function SqlLabPage() {
           {dirty ? <Tag color="orange">未保存</Tag> : currentId != null ? <Tag color="green">已保存</Tag> : null}
         </Space>
 
-        <div style={{ border: '1px solid var(--color-border-2)', borderRadius: 8, overflow: 'hidden' }}>
+        <div
+          style={{
+            border: '1px solid var(--color-border-2)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            flex: '0 0 auto',
+            height: editorH,
+          }}
+        >
           <Editor
-            height="240px"
+            height={editorH}
             language="sql"
             value={content}
             onChange={(v) => setContent(v ?? '')}
             onMount={(editor, monaco) => {
+              editorRef.current = editor;
+              window.setTimeout(() => editor.layout(), 0);
               editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => runRef.current());
               editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current());
             }}
-            options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false }}
+            options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false, automaticLayout: true }}
           />
         </div>
 
         {error && (
-          <Typography.Text type="error" style={{ display: 'block', marginTop: 12, whiteSpace: 'pre-wrap' }}>
+          <Typography.Text type="error" style={{ display: 'block', marginTop: 12, whiteSpace: 'pre-wrap', flexShrink: 0 }}>
             {error}
           </Typography.Text>
         )}
 
-        {running && <Spin style={{ margin: '20px auto', display: 'block' }} size={24} />}
+        <div className="scroll-y" style={{ flex: 1, marginTop: 14, position: 'relative' }}>
+          {running && <Spin style={{ display: 'block', margin: '24px auto' }} size={24} />}
 
-        {result && !running && (
-          <div style={{ marginTop: 14 }}>
-            <Space style={{ marginBottom: 8 }} wrap>
-              {result.isQuery ? (
-                <>
-                  <Tag color="arcoblue">{result.rowCount} 行</Tag>
-                  {result.truncated && <Tag color="orange">结果已截断（达到行数上限）</Tag>}
-                </>
-              ) : (
-                <Tag color="green">影响 {result.affectedRows} 行</Tag>
+          {!running && !result && !error && (
+            <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
+              编写 SQL 后点「运行」查看结果
+            </Typography.Text>
+          )}
+
+          {result && !running && (
+            <div>
+              <Space style={{ marginBottom: 8 }} wrap>
+                {result.isQuery ? (
+                  <>
+                    <Tag color="arcoblue">{result.rowCount} 行</Tag>
+                    {result.truncated && <Tag color="orange">结果已截断（达到行数上限）</Tag>}
+                  </>
+                ) : (
+                  <Tag color="green">影响 {result.affectedRows} 行</Tag>
+                )}
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  耗时 {result.elapsedMs} ms
+                </Typography.Text>
+              </Space>
+              {result.isQuery && (
+                <Table
+                  size="small"
+                  data={result.rows.map((row, i) => ({ __i: i, row }))}
+                  rowKey="__i"
+                  pagination={{ pageSize: 20 }}
+                  scroll={{ x: true }}
+                  columns={result.columns.map((c, idx) => ({
+                    title: c,
+                    render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
+                    ellipsis: true,
+                  }))}
+                />
               )}
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                耗时 {result.elapsedMs} ms
-              </Typography.Text>
-            </Space>
-            {result.isQuery && (
-              <Table
-                size="small"
-                data={result.rows.map((row, i) => ({ __i: i, row }))}
-                rowKey="__i"
-                pagination={{ pageSize: 20 }}
-                scroll={{ x: true }}
-                columns={result.columns.map((c, idx) => ({
-                  title: c,
-                  render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
-                  ellipsis: true,
-                  width: 160,
-                }))}
-              />
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );

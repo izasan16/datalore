@@ -140,9 +140,10 @@ export default function DatasetPage() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+    <div className="page-fill">
       <Card
         title="数据源与表"
+        className="card-fill"
         style={{ width: 340, flexShrink: 0 }}
         extra={
           <Button size="mini" icon={<IconRefresh />} onClick={() => {
@@ -151,22 +152,24 @@ export default function DatasetPage() {
           }} />
         }
       >
-        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8, flexShrink: 0 }}>
           点击数据源加载其表，点击表名查看列结构
         </Typography.Text>
-        {treeData.length > 0 ? (
-          <Tree
-            treeData={treeData as any}
-            expandedKeys={expandedKeys}
-            onExpand={(keys: any) => setExpandedKeys(keys.map(String))}
-            selectedKeys={selectedKey ? [selectedKey] : []}
-            onSelect={onTreeSelect}
-          />
-        ) : (
-          <Typography.Text type="secondary">暂无数据源</Typography.Text>
-        )}
+        <div className="scroll-y" style={{ flex: 1 }}>
+          {treeData.length > 0 ? (
+            <Tree
+              treeData={treeData as any}
+              expandedKeys={expandedKeys}
+              onExpand={(keys: any) => setExpandedKeys(keys.map(String))}
+              selectedKeys={selectedKey ? [selectedKey] : []}
+              onSelect={onTreeSelect}
+            />
+          ) : (
+            <Typography.Text type="secondary">暂无数据源</Typography.Text>
+          )}
+        </div>
         {columns && (
-          <div style={{ marginTop: 12, borderTop: '1px solid var(--color-border-2)', paddingTop: 12 }}>
+          <div className="scroll-y" style={{ flexShrink: 0, maxHeight: '40%', marginTop: 12, borderTop: '1px solid var(--color-border-2)', paddingTop: 12 }}>
             <Typography.Title heading={6} style={{ marginTop: 0 }}>
               列结构 · {colLabel}
             </Typography.Title>
@@ -182,6 +185,7 @@ export default function DatasetPage() {
 
       <Card
         title="导入的数据集"
+        className="card-fill"
         style={{ flex: 1, minWidth: 0 }}
         extra={
           <Space>
@@ -192,30 +196,37 @@ export default function DatasetPage() {
           </Space>
         }
       >
-        <Table
-          loading={loading}
-          data={list}
-          rowKey="id"
-          pagination={false}
-          columns={[
-            { title: '名称', dataIndex: 'name' },
-            {
-              title: '行数', dataIndex: 'rowCount', width: 110,
-              render: (v: number) => v?.toLocaleString(),
-            },
-            { title: '来源文件', dataIndex: 'fileName', width: 170, ellipsis: true },
-            { title: '创建时间', dataIndex: 'createdAt', width: 170, render: (v: string) => v.replace('T', ' ').slice(0, 19) },
-            {
-              title: '操作', width: 150,
-              render: (_: unknown, row: DatasetInfo) => (
-                <Space>
-                  <Button size="mini" type="text" onClick={() => openPreview(row)}>预览</Button>
-                  <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
-                </Space>
-              ),
-            },
-          ]}
-        />
+        <div className="scroll-y">
+          <Table
+            loading={loading}
+            data={list}
+            rowKey="id"
+            pagination={false}
+            columns={[
+              { title: '名称', dataIndex: 'name' },
+              {
+                title: '行数', dataIndex: 'rowCount', width: 110,
+                render: (v: number) => v?.toLocaleString(),
+              },
+              { title: '来源文件', dataIndex: 'fileName', width: 170, ellipsis: true },
+              { title: '创建时间', dataIndex: 'createdAt', width: 170, render: (v: string) => v.replace('T', ' ').slice(0, 19) },
+              {
+                title: '操作', width: 150,
+                render: (_: unknown, row: DatasetInfo) => (
+                  <Space>
+                    <Button size="mini" type="text" onClick={() => openPreview(row)}>预览</Button>
+                    <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+          {list.length === 0 && !loading && (
+            <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
+              还没有数据集，点右上角「上传数据」导入第一张表
+            </Typography.Text>
+          )}
+        </div>
       </Card>
 
       <Drawer
