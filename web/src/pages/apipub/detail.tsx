@@ -18,6 +18,8 @@ export default function ApiPubDetailPage() {
   const [apiLoading, setApiLoading] = useState(true);
   const [apiLoadError, setApiLoadError] = useState(false);
   const [cols, setCols] = useState<ColumnDef[]>([]);
+  const [columnsLoading, setColumnsLoading] = useState(true);
+  const [columnsLoadError, setColumnsLoadError] = useState(false);
   const [apps, setApps] = useState<ApiAppInfo[]>([]);
   const [appsLoading, setAppsLoading] = useState(false);
   const [appsLoadError, setAppsLoadError] = useState(false);
@@ -59,6 +61,18 @@ export default function ApiPubDetailPage() {
     }
   }, [apiId]);
 
+  const loadColumns = useCallback(async (datasetId: number) => {
+    setColumnsLoading(true);
+    setColumnsLoadError(false);
+    try {
+      setCols(await datasetColumns(datasetId));
+    } catch {
+      setColumnsLoadError(true);
+    } finally {
+      setColumnsLoading(false);
+    }
+  }, []);
+
   const reload = useCallback(async () => {
     setApiLoading(true);
     setApiLoadError(false);
@@ -69,25 +83,22 @@ export default function ApiPubDetailPage() {
       setColumns(a.columns);
       setFilterColumns(a.filterColumns);
       setMaxRows(a.maxRows);
-      try {
-        setCols(await datasetColumns(a.datasetId));
-      } catch {
-        setCols([]);
-      }
       setApiLoading(false);
+      void loadColumns(a.datasetId);
       await loadApps();
       await loadGrants();
     } catch {
       setApiLoadError(true);
       setApiLoading(false);
     }
-  }, [apiId, loadApps, loadGrants]);
+  }, [apiId, loadApps, loadColumns, loadGrants]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
   async function onSaveCfg() {
+    if (columnsLoading || columnsLoadError) return;
     setSavingCfg(true);
     try {
       setApi(await updateApi(apiId, { name, columns, filterColumns, maxRows }));
@@ -225,15 +236,35 @@ export default function ApiPubDetailPage() {
           <Input value={name} onChange={setName} style={{ width: 220 }} placeholder="API 名称" />
           <InputNumber value={maxRows} onChange={setMaxRows} min={1} max={10000} style={{ width: 140 }} />
           <span style={{ color: 'var(--color-text-3)', fontSize: 12, alignSelf: 'center' }}>行数上限</span>
-          <Button type="primary" size="small" loading={savingCfg} onClick={onSaveCfg}>保存配置</Button>
+          <Button
+            type="primary"
+            size="small"
+            loading={savingCfg}
+            disabled={columnsLoading || columnsLoadError}
+            onClick={onSaveCfg}
+          >
+            保存配置
+          </Button>
         </Space>
-        {cols.length > 0 && (
+        {columnsLoadError && !columnsLoading ? (
+          <div className="page-error" role="alert" style={{ marginTop: 12, padding: '8px 12px', textAlign: 'left' }}>
+            <Typography.Text>数据集列加载失败，请重试。</Typography.Text>
+            <Button size="mini" loading={columnsLoading} onClick={() => loadColumns(api.datasetId)} style={{ marginLeft: 10 }}>
+              重试
+            </Button>
+          </div>
+        ) : columnsLoading ? (
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
+            正在加载数据集列…
+          </Typography.Text>
+        ) : cols.length > 0 && (
           <>
             <Typography.Text type="secondary" style={{ display: 'block', margin: '8px 0 4px', fontSize: 12 }}>
               暴露列
             </Typography.Text>
             <CheckboxGroup
               value={columns}
+              disabled={columnsLoading || columnsLoadError}
               onChange={(v) => {
                 setColumns(v as string[]);
                 setFilterColumns((filterColumns || []).filter((f) => (v as string[]).includes(f)));
@@ -245,6 +276,7 @@ export default function ApiPubDetailPage() {
             </Typography.Text>
             <CheckboxGroup
               value={filterColumns}
+              disabled={columnsLoading || columnsLoadError}
               onChange={(v) => setFilterColumns(v as string[])}
               options={cols.filter((c) => columns.includes(c.name)).map((c) => ({ label: c.name, value: c.name }))}
             />
