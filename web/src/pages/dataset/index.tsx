@@ -152,10 +152,16 @@ export default function DatasetPage() {
         className="card-fill"
         style={{ width: 340, flexShrink: 0 }}
         extra={
-          <Button size="mini" icon={<IconRefresh />} onClick={() => {
+          <Button
+            size="mini"
+            icon={<IconRefresh />}
+            title="刷新数据源与数据表"
+            aria-label="刷新数据源与数据表"
+            onClick={() => {
             setTablesByDs({});
             loadDatasources();
-          }} />
+            }}
+          />
         }
       >
         <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8, flexShrink: 0 }}>
@@ -206,7 +212,12 @@ export default function DatasetPage() {
         style={{ flex: 1, minWidth: 0 }}
         extra={
           <Space>
-            <Button icon={<IconRefresh />} onClick={reload} />
+            <Button
+              icon={<IconRefresh />}
+              title="刷新数据集列表"
+              aria-label="刷新数据集列表"
+              onClick={reload}
+            />
             <Button type="primary" icon={<IconPlus />} onClick={() => nav('/datamanage/new')}>
               上传数据
             </Button>

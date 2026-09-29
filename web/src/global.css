@@ -277,6 +277,16 @@ body,
   .compact-card-grid {
     grid-template-columns: 1fr;
   }
+
+  .page-fill {
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .page-fill > .card-fill {
+    width: 100% !important;
+  }
 }
 
 /* 仅用于有意需要内部滚动的编辑器、结果、树或内部滚动区域。通用卡片不得撑满高度。 */
