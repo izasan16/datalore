@@ -53,8 +53,7 @@ export default function ApiAppsPage() {
         ),
       });
     } catch (e: any) {
-      // 错误提示交给列表页统一处理
-      if (e.response?.data?.message) Modal.error({ title: '创建失败', content: e.response.data.message });
+      Modal.error({ title: '创建失败', content: e.response?.data?.message || '创建失败，请重试' });
     } finally {
       setCreating(false);
     }

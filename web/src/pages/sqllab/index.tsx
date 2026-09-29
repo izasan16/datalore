@@ -18,6 +18,10 @@ export default function SqlLabPage() {
   const [baseline, setBaseline] = useState({ name: '', content: 'select 1;' });
   const [dsList, setDsList] = useState<DataSourceInfo[]>([]);
   const [datasourceId, setDatasourceId] = useState<number | undefined>();
+  const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [scriptsError, setScriptsError] = useState(false);
+  const [datasourcesLoading, setDatasourcesLoading] = useState(false);
+  const [datasourcesError, setDatasourcesError] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState('');
@@ -42,18 +46,39 @@ export default function SqlLabPage() {
     };
   }, [editorH]);
 
-  useEffect(() => {
-    listScripts().then(setScripts).catch(() => {});
-    listDatasources().then((list) => {
+  const loadScripts = useCallback(async () => {
+    setScriptsLoading(true);
+    setScriptsError(false);
+    try {
+      setScripts(await listScripts());
+    } catch {
+      setScriptsError(true);
+    } finally {
+      setScriptsLoading(false);
+    }
+  }, []);
+
+  const loadDatasources = useCallback(async () => {
+    setDatasourcesLoading(true);
+    setDatasourcesError(false);
+    try {
+      const list = await listDatasources();
       setDsList(list);
       const builtin = list.find((d) => d.builtin);
       if (builtin) setDatasourceId(builtin.id);
-    }).catch(() => {});
+    } catch {
+      setDatasourcesError(true);
+    } finally {
+      setDatasourcesLoading(false);
+    }
   }, []);
 
-  const reloadScripts = useCallback(() => {
-    listScripts().then(setScripts).catch(() => {});
-  }, []);
+  useEffect(() => {
+    loadScripts();
+    loadDatasources();
+  }, [loadDatasources, loadScripts]);
+
+  const reloadScripts = loadScripts;
 
   async function run() {
     if (!content.trim()) {
@@ -185,7 +210,14 @@ export default function SqlLabPage() {
           </Button>
         }
       >
-        {scripts.length === 0 ? (
+        {scriptsError && !scriptsLoading ? (
+          <div className="page-error" role="alert">
+            <Typography.Text>脚本列表加载失败，请重试。</Typography.Text>
+            <div style={{ marginTop: 10 }}>
+              <Button size="small" loading={scriptsLoading} onClick={loadScripts}>重试</Button>
+            </div>
+          </div>
+        ) : scripts.length === 0 ? (
           <Typography.Text type="secondary" style={{ display: 'block', padding: '8px 16px' }}>
             还没有脚本，点「新建」开始
           </Typography.Text>
@@ -266,6 +298,15 @@ export default function SqlLabPage() {
           )}
           {dirty ? <Tag color="orange">未保存</Tag> : currentId != null ? <Tag color="green">已保存</Tag> : null}
         </Space>
+
+        {datasourcesError && !datasourcesLoading && (
+          <div className="page-error" role="alert" style={{ marginBottom: 10, padding: '8px 12px' }}>
+            <Typography.Text>数据源加载失败，请重试。</Typography.Text>
+            <Button size="small" loading={datasourcesLoading} onClick={loadDatasources} style={{ marginLeft: 10 }}>
+              重试
+            </Button>
+          </div>
+        )}
 
         <div
           style={{
