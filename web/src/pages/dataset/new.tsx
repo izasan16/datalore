@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Card, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
+  Button, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
 } from '@arco-design/web-react';
 import { IconArrowRise, IconUpload } from '@arco-design/web-react/icon';
 import { ColumnDef, confirmDataset, uploadDataset } from '../../api/dataset';
@@ -77,57 +77,69 @@ export default function DatasetNewPage() {
   }
 
   return (
-    <Card
-      title="上传数据"
-      style={{ maxWidth: 880, margin: '0 auto' }}
-      extra={<Button type="text" onClick={() => nav('/datamanage')}>返回</Button>}
-    >
-      <Steps current={step} style={{ marginBottom: 28 }}>
-        <Steps.Step title="选择文件" />
-        <Steps.Step title="选择入库位置" />
-      </Steps>
+    <div className="page-shell">
+      <div className="page-header">
+        <div className="page-header-main">
+          <Typography.Title heading={4} style={{ margin: 0 }}>
+            上传数据
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            上传文件并选择数据源，将数据导入为可管理的数据集
+          </Typography.Text>
+        </div>
+        <div className="page-header-actions">
+          <Button type="text" onClick={() => nav('/datamanage')}>返回列表</Button>
+        </div>
+      </div>
 
-      {step === 0 && (
-        <Upload
-          drag
-          multiple={false}
-          limit={1}
-          customRequest={(option) => {
-            handleUpload(option.file as File);
-            return { abort: () => {} };
-          }}
-          accept=".csv,.xlsx,.xls,.txt"
-          showUploadList={false}
-          disabled={uploading}
-        >
-          <div style={{ textAlign: 'center', padding: '72px 0' }}>
-            <div style={{ marginBottom: 16 }}>
-              <IconUpload style={{ fontSize: 40, color: 'var(--daaspro-primary)' }} />
+      <section className="page-section natural-height" style={{ maxWidth: 960, width: '100%', margin: '0 auto' }}>
+        <Steps current={step} style={{ marginBottom: 28 }}>
+          <Steps.Step title="选择文件" />
+          <Steps.Step title="选择入库位置" />
+        </Steps>
+
+        {step === 0 && (
+          <Upload
+            drag
+            multiple={false}
+            limit={1}
+            customRequest={(option) => {
+              handleUpload(option.file as File);
+              return { abort: () => {} };
+            }}
+            accept=".csv,.xlsx,.xls,.txt"
+            showUploadList={false}
+            disabled={uploading}
+          >
+            <div style={{ textAlign: 'center', padding: '72px 0' }}>
+              <div style={{ marginBottom: 16 }}>
+                <IconUpload style={{ fontSize: 40, color: 'var(--daaspro-primary)' }} />
+              </div>
+              <Typography.Title heading={6} style={{ marginTop: 0 }}>
+                点击或拖拽文件到此处上传
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                支持 CSV / XLSX，单文件不超过 20MB；首行为表头
+              </Typography.Text>
             </div>
-            <Typography.Title heading={6} style={{ marginTop: 0 }}>
-              点击或拖拽文件到此处上传
-            </Typography.Title>
-            <Typography.Text type="secondary">
-              支持 CSV / XLSX，单文件不超过 20MB；首行为表头
-            </Typography.Text>
-          </div>
-        </Upload>
-      )}
+          </Upload>
+        )}
 
-      {step === 1 && result && (
-        <ImportForm
-          result={result}
-          importing={importing}
-          defaultName={fileRef?.name?.replace(/\.(csv|xlsx|xls|txt)$/i, '') || ''}
-          onConfirm={onConfirm}
-          onReset={() => {
-            setResult(null);
-            setStep(0);
-            setFileRef(null);
-          }}
-        />
-      )}
-    </Card>
+        {step === 1 && result && (
+          <ImportForm
+            result={result}
+            importing={importing}
+            defaultName={fileRef?.name?.replace(/\.(csv|xlsx|xls|txt)$/i, '') || ''}
+            onConfirm={onConfirm}
+            onReset={() => {
+              setResult(null);
+              setStep(0);
+              setFileRef(null);
+            }}
+          />
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -142,12 +154,19 @@ function ImportForm({
 }) {
   const [form] = Form.useForm();
   const [dsOptions, setDsOptions] = useState<{ value: number; label: string }[]>([]);
+  const [datasourceLoading, setDatasourceLoading] = useState(false);
+  const [datasourceError, setDatasourceError] = useState(false);
   const [tableOptions, setTableOptions] = useState<{ value: string; label: string }[]>([]);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [tableError, setTableError] = useState(false);
   const [mode, setMode] = useState<'new' | 'append'>('new');
   const [watchDs, setWatchDs] = useState<number>();
 
-  useEffect(() => {
-    listDatasources().then((list) => {
+  const loadDatasources = useCallback(async () => {
+    setDatasourceLoading(true);
+    setDatasourceError(false);
+    try {
+      const list = await listDatasources();
       setDsOptions(list.map((d) => ({
         value: d.id,
         label: d.builtin ? `${d.name}（内置，可写入）` : `${d.name}（${d.type}，MVP 只读）`,
@@ -157,16 +176,42 @@ function ImportForm({
         form.setFieldValue('datasourceId', builtin.id);
         setWatchDs(builtin.id);
       }
-    });
+    } catch (e: any) {
+      setDatasourceError(true);
+      Message.error(e.response?.data?.message || '数据源加载失败');
+    } finally {
+      setDatasourceLoading(false);
+    }
   }, [form]);
 
-  useEffect(() => {
-    if (watchDs) {
-      listTables(watchDs)
-        .then((tables) => setTableOptions(tables.map((t) => ({ value: t.name, label: t.name }))))
-        .catch(() => setTableOptions([]));
+  const loadTables = useCallback(async (datasourceId: number) => {
+    setTableLoading(true);
+    setTableError(false);
+    try {
+      const tables = await listTables(datasourceId);
+      setTableOptions(tables.map((t) => ({ value: t.name, label: t.name })));
+    } catch (e: any) {
+      setTableOptions([]);
+      setTableError(true);
+      Message.error(e.response?.data?.message || '目标表加载失败');
+    } finally {
+      setTableLoading(false);
     }
-  }, [watchDs]);
+  }, []);
+
+  useEffect(() => {
+    loadDatasources();
+  }, [loadDatasources]);
+
+  useEffect(() => {
+    if (!watchDs) {
+      setTableOptions([]);
+      setTableError(false);
+      return;
+    }
+
+    loadTables(watchDs);
+  }, [loadTables, watchDs]);
 
   return (
     <div>
@@ -179,18 +224,20 @@ function ImportForm({
         ))}
       </Space>
 
-      <Table
-        data={result.previewRows.map((row, i) => ({ __i: i, row }))}
-        rowKey="__i"
-        size="small"
-        pagination={{ pageSize: 10 }}
-        columns={result.columns.map((c, idx) => ({
-          title: `${c.name}`,
-          render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
-          ellipsis: true,
-          width: 140,
-        }))}
-      />
+      <div className="bounded-checks">
+        <Table
+          data={result.previewRows.map((row, i) => ({ __i: i, row }))}
+          rowKey="__i"
+          size="small"
+          pagination={{ pageSize: 10 }}
+          columns={result.columns.map((c, idx) => ({
+            title: `${c.name}`,
+            render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
+            ellipsis: true,
+            width: 140,
+          }))}
+        />
+      </div>
       <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
         仅展示前 {result.previewRows.length} 行预览
       </Typography.Text>
@@ -203,7 +250,7 @@ function ImportForm({
         initialValues={{ mode: 'new', name: defaultName } as any}
       >
         <Row gutter={16}>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               label="数据名称"
               field="name"
@@ -213,18 +260,27 @@ function ImportForm({
               <Input placeholder="如：销售明细" disabled={mode === 'append'} />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
               <Select
                 options={dsOptions}
+                loading={datasourceLoading}
                 onChange={(v) => {
                   setWatchDs(v as number);
                   form.setFieldValue('existingTable', undefined);
                 }}
               />
             </Form.Item>
+            {datasourceError && (
+              <div className="page-error" role="alert" style={{ marginTop: -12, padding: '8px 12px', textAlign: 'left' }}>
+                <Typography.Text>数据源加载失败，请重试。</Typography.Text>
+                <Button size="mini" type="text" loading={datasourceLoading} onClick={loadDatasources}>
+                  重试
+                </Button>
+              </div>
+            )}
           </Col>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item label="导入方式" field="mode">
               <Select
                 onChange={(v) => setMode(v as 'new' | 'append')}
@@ -236,15 +292,23 @@ function ImportForm({
             </Form.Item>
           </Col>
           {mode === 'append' && (
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item
                 label="目标表"
                 field="existingTable"
                 rules={[{ required: true, message: '请选择目标表' }]}
                 extra="目标表列名需与上传文件表头完全一致"
               >
-                <Select options={tableOptions} placeholder="选择已有表" showSearch />
+                <Select options={tableOptions} loading={tableLoading} placeholder="选择已有表" showSearch />
               </Form.Item>
+              {tableError && (
+                <div className="page-error" role="alert" style={{ marginTop: -12, padding: '8px 12px', textAlign: 'left' }}>
+                  <Typography.Text>目标表加载失败，请重试。</Typography.Text>
+                  <Button size="mini" type="text" loading={tableLoading} onClick={() => watchDs && loadTables(watchDs)}>
+                    重试
+                  </Button>
+                </div>
+              )}
             </Col>
           )}
         </Row>

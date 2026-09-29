@@ -188,7 +188,108 @@ body,
   }
 }
 
-/* ---------- 页面布局工具类（应用壳固定 + 页面内 flex 分配） ---------- */
+/* ---------- 页面级布局工具类（内容驱动，20px 节奏） ---------- */
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+}
+
+.page-header-main {
+  min-width: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.page-section {
+  min-width: 0;
+  padding: 20px;
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-border-2);
+  border-radius: 8px;
+}
+
+.natural-height {
+  height: auto;
+  flex: 0 0 auto;
+}
+
+.page-empty,
+.page-error {
+  padding: 20px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.page-empty {
+  color: var(--color-text-3);
+  background: var(--color-fill-1);
+  border: 1px dashed var(--color-border-2);
+}
+
+.page-error {
+  color: var(--color-danger-6);
+  background: var(--color-danger-1);
+  border: 1px solid var(--color-danger-3);
+}
+
+.compact-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.compact-entry-card {
+  min-width: 0;
+  padding: 16px;
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-border-2);
+  border-radius: 8px;
+}
+
+.bounded-checks {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .page-header-actions {
+    flex-wrap: wrap;
+  }
+
+  .compact-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-fill {
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .page-fill > .card-fill {
+    width: 100% !important;
+  }
+}
+
+/* 仅用于有意需要内部滚动的编辑器、结果、树或内部滚动区域。通用卡片不得撑满高度。 */
 
 .page-fill {
   height: 100%;

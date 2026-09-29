@@ -15,11 +15,13 @@ export default function DatasetPage() {
   const nav = useNavigate();
   const [list, setList] = useState<DatasetInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState(false);
   const [preview, setPreview] = useState<DatasetPreview | null>(null);
   const [previewName, setPreviewName] = useState('');
 
   // 左侧树
   const [dsList, setDsList] = useState<DataSourceInfo[]>([]);
+  const [datasourceError, setDatasourceError] = useState(false);
   const [tablesByDs, setTablesByDs] = useState<Record<number, { name: string }[]>>({});
   const [loadingDs, setLoadingDs] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
@@ -29,9 +31,11 @@ export default function DatasetPage() {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setListError(false);
     try {
       setList(await listDatasets());
     } catch (e: any) {
+      setListError(true);
       Message.error(e.response?.data?.message || '加载失败');
     } finally {
       setLoading(false);
@@ -41,7 +45,9 @@ export default function DatasetPage() {
   const loadDatasources = useCallback(async () => {
     try {
       setDsList(await listDatasources());
+      setDatasourceError(false);
     } catch (e: any) {
+      setDatasourceError(true);
       Message.error(e.response?.data?.message || '数据源加载失败');
     }
   }, []);
@@ -146,10 +152,16 @@ export default function DatasetPage() {
         className="card-fill"
         style={{ width: 340, flexShrink: 0 }}
         extra={
-          <Button size="mini" icon={<IconRefresh />} onClick={() => {
+          <Button
+            size="mini"
+            icon={<IconRefresh />}
+            title="刷新数据源与数据表"
+            aria-label="刷新数据源与数据表"
+            onClick={() => {
             setTablesByDs({});
             loadDatasources();
-          }} />
+            }}
+          />
         }
       >
         <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8, flexShrink: 0 }}>
@@ -165,7 +177,18 @@ export default function DatasetPage() {
               onSelect={onTreeSelect}
             />
           ) : (
-            <Typography.Text type="secondary">暂无数据源</Typography.Text>
+            datasourceError ? (
+              <div className="page-error">
+                <Typography.Text>数据源加载失败</Typography.Text>
+                <div style={{ marginTop: 8 }}>
+                  <Button size="mini" type="text" onClick={loadDatasources}>重试</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="page-empty" style={{ padding: 12 }}>
+                <Typography.Text type="secondary">暂无数据源</Typography.Text>
+              </div>
+            )
           )}
         </div>
         {columns && (
@@ -189,7 +212,12 @@ export default function DatasetPage() {
         style={{ flex: 1, minWidth: 0 }}
         extra={
           <Space>
-            <Button icon={<IconRefresh />} onClick={reload} />
+            <Button
+              icon={<IconRefresh />}
+              title="刷新数据集列表"
+              aria-label="刷新数据集列表"
+              onClick={reload}
+            />
             <Button type="primary" icon={<IconPlus />} onClick={() => nav('/datamanage/new')}>
               上传数据
             </Button>
@@ -197,34 +225,52 @@ export default function DatasetPage() {
         }
       >
         <div className="scroll-y">
-          <Table
-            loading={loading}
-            data={list}
-            rowKey="id"
-            pagination={false}
-            columns={[
-              { title: '名称', dataIndex: 'name' },
-              {
-                title: '行数', dataIndex: 'rowCount', width: 110,
-                render: (v: number) => v?.toLocaleString(),
-              },
-              { title: '来源文件', dataIndex: 'fileName', width: 170, ellipsis: true },
-              { title: '创建时间', dataIndex: 'createdAt', width: 170, render: (v: string) => v.replace('T', ' ').slice(0, 19) },
-              {
-                title: '操作', width: 150,
-                render: (_: unknown, row: DatasetInfo) => (
-                  <Space>
-                    <Button size="mini" type="text" onClick={() => openPreview(row)}>预览</Button>
-                    <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
-                  </Space>
-                ),
-              },
-            ]}
-          />
-          {list.length === 0 && !loading && (
-            <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
-              还没有数据集，点右上角「上传数据」导入第一张表
-            </Typography.Text>
+          {listError && !loading ? (
+            <div className="page-error">
+              <Typography.Text>数据集列表加载失败，请重试</Typography.Text>
+              <div style={{ marginTop: 12 }}>
+                <Button size="small" onClick={reload}>重新加载</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Table
+                loading={loading}
+                data={list}
+                rowKey="id"
+                pagination={false}
+                columns={[
+                  { title: '名称', dataIndex: 'name' },
+                  {
+                    title: '行数', dataIndex: 'rowCount', width: 110,
+                    render: (v: number) => v?.toLocaleString(),
+                  },
+                  { title: '来源文件', dataIndex: 'fileName', width: 170, ellipsis: true },
+                  { title: '创建时间', dataIndex: 'createdAt', width: 170, render: (v: string) => v.replace('T', ' ').slice(0, 19) },
+                  {
+                    title: '操作', width: 150,
+                    render: (_: unknown, row: DatasetInfo) => (
+                      <Space>
+                        <Button size="mini" type="text" onClick={() => openPreview(row)}>预览</Button>
+                        <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+              {list.length === 0 && !loading && (
+                <div className="page-empty" style={{ marginTop: 12 }}>
+                  <Typography.Text type="secondary">
+                    还没有数据集，上传文件导入第一张表
+                  </Typography.Text>
+                  <div style={{ marginTop: 12 }}>
+                    <Button type="primary" size="small" icon={<IconPlus />} onClick={() => nav('/datamanage/new')}>
+                      上传数据
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </Card>
@@ -237,17 +283,19 @@ export default function DatasetPage() {
         footer={null}
       >
         {preview && (
-          <Table
-            data={preview.rows.map((row, i) => ({ __i: i, row }))}
-            rowKey="__i"
-            size="small"
-            pagination={false}
-            columns={preview.columns.map((c, idx) => ({
-              title: `${c.name}`,
-              render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
-              ellipsis: true,
-            }))}
-          />
+          <div className="bounded-checks" style={{ overflowX: 'auto' }}>
+            <Table
+              data={preview.rows.map((row, i) => ({ __i: i, row }))}
+              rowKey="__i"
+              size="small"
+              pagination={false}
+              columns={preview.columns.map((c, idx) => ({
+                title: `${c.name}`,
+                render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
+                ellipsis: true,
+              }))}
+            />
+          </div>
         )}
       </Drawer>
     </div>

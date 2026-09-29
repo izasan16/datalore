@@ -4,10 +4,9 @@ import { Layout, Menu, Typography, Button, Avatar } from '@arco-design/web-react
 import {
   IconStorage,
   IconCode,
-  IconBranch,
   IconCloud,
+  IconCodeBlock,
   IconHome,
-  IconSettings,
 } from '@arco-design/web-react/icon';
 import { me, logout } from '../../api/auth';
 import { LogoMark } from '../../components/Brand';
@@ -26,9 +25,7 @@ const MENU = [
   { key: 'datasource', title: '数据源', icon: <IconStorage /> },
   { key: 'datamanage', title: '数据管理', icon: <IconCloud /> },
   { key: 'sqllab', title: 'SQL 分析', icon: <IconCode /> },
-  { key: 'apipub', title: 'API 发布', icon: <IconCloud />, disabled: true },
-  { key: 'workflow', title: '工作流', icon: <IconBranch />, disabled: true },
-  { key: 'settings', title: '设置', icon: <IconSettings />, disabled: true },
+  { key: 'apipub', title: 'API 发布', icon: <IconCodeBlock /> },
 ];
 
 export default function WorkspaceLayout() {
@@ -36,8 +33,9 @@ export default function WorkspaceLayout() {
   const location = useLocation();
   const [user, setUser] = useState<MeInfo | null>(null);
   // 菜单受控高亮：取路径第一段（/datamanage/new -> datamanage）
-  const activeKey = '/' + location.pathname.split('/')[1];
-  const selectedKeys = MENU.some((m) => m.key === activeKey.slice(1)) ? [activeKey.slice(1)] : [];
+  const currentModuleKey = location.pathname.split('/')[1] || 'workspace';
+  const selectedKeys = MENU.some((m) => m.key === currentModuleKey) ? [currentModuleKey] : [];
+  const currentModuleTitle = MENU.find((m) => m.key === currentModuleKey)?.title ?? '工作台';
 
   useEffect(() => {
     me()
@@ -71,42 +69,66 @@ export default function WorkspaceLayout() {
           onClickMenuItem={(key) => nav(`/${key}`)}
         >
           {MENU.map((m) => (
-            <Menu.Item key={m.key} disabled={m.disabled}>
+            <Menu.Item key={m.key}>
               {m.icon}
               {m.title}
             </Menu.Item>
           ))}
         </Menu>
-        <div style={{ padding: '12px 20px' }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            灰色菜单为后续迭代模块
-          </Typography.Text>
-        </div>
       </Sider>
       <Layout>
         <Header
           style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
             gap: 12,
             background: '#fff',
             borderBottom: '1px solid var(--color-border-2)',
             height: 56,
+            minHeight: 56,
+            padding: '0 20px',
+            boxSizing: 'border-box',
+            flexWrap: 'wrap',
           }}
         >
-          <Avatar size={28} style={{ backgroundColor: 'var(--daaspro-primary)' }}>
-            {user.username.slice(0, 1).toUpperCase()}
-          </Avatar>
-          <Typography.Text>
-            {user.username}
-            <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
-              {user.role === 'admin' ? '管理员' : '成员'}
-            </Typography.Text>
+          <Typography.Text
+            style={{
+              minWidth: 0,
+              flex: '1 1 160px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 16,
+              fontWeight: 600,
+            }}
+          >
+            {currentModuleTitle}
           </Typography.Text>
-          <Button size="mini" onClick={onLogout} style={{ marginLeft: 8 }}>
-            退出
-          </Button>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 12,
+              minWidth: 0,
+              flex: '0 1 auto',
+              flexWrap: 'wrap',
+            }}
+          >
+            <Avatar size={28} style={{ backgroundColor: 'var(--daaspro-primary)' }}>
+              {user.username.slice(0, 1).toUpperCase()}
+            </Avatar>
+            <Typography.Text style={{ whiteSpace: 'nowrap' }}>
+              {user.username}
+              <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
+                {user.role === 'admin' ? '管理员' : '成员'}
+              </Typography.Text>
+            </Typography.Text>
+            <Button size="mini" onClick={onLogout}>
+              退出
+            </Button>
+          </div>
         </Header>
         <Content style={{ padding: 20, background: 'var(--color-fill-1)', overflow: 'auto' }}>
           <Outlet context={user} />

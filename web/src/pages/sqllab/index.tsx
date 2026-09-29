@@ -18,6 +18,10 @@ export default function SqlLabPage() {
   const [baseline, setBaseline] = useState({ name: '', content: 'select 1;' });
   const [dsList, setDsList] = useState<DataSourceInfo[]>([]);
   const [datasourceId, setDatasourceId] = useState<number | undefined>();
+  const [scriptsLoading, setScriptsLoading] = useState(true);
+  const [scriptsError, setScriptsError] = useState(false);
+  const [datasourcesLoading, setDatasourcesLoading] = useState(false);
+  const [datasourcesError, setDatasourcesError] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState('');
@@ -42,18 +46,39 @@ export default function SqlLabPage() {
     };
   }, [editorH]);
 
-  useEffect(() => {
-    listScripts().then(setScripts).catch(() => {});
-    listDatasources().then((list) => {
+  const loadScripts = useCallback(async () => {
+    setScriptsLoading(true);
+    setScriptsError(false);
+    try {
+      setScripts(await listScripts());
+    } catch {
+      setScriptsError(true);
+    } finally {
+      setScriptsLoading(false);
+    }
+  }, []);
+
+  const loadDatasources = useCallback(async () => {
+    setDatasourcesLoading(true);
+    setDatasourcesError(false);
+    try {
+      const list = await listDatasources();
       setDsList(list);
       const builtin = list.find((d) => d.builtin);
       if (builtin) setDatasourceId(builtin.id);
-    }).catch(() => {});
+    } catch {
+      setDatasourcesError(true);
+    } finally {
+      setDatasourcesLoading(false);
+    }
   }, []);
 
-  const reloadScripts = useCallback(() => {
-    listScripts().then(setScripts).catch(() => {});
-  }, []);
+  useEffect(() => {
+    loadScripts();
+    loadDatasources();
+  }, [loadDatasources, loadScripts]);
+
+  const reloadScripts = loadScripts;
 
   async function run() {
     if (!content.trim()) {
@@ -185,7 +210,19 @@ export default function SqlLabPage() {
           </Button>
         }
       >
-        {scripts.length === 0 ? (
+        {scriptsLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
+            <Spin size={16} />
+            <Typography.Text type="secondary">正在加载脚本…</Typography.Text>
+          </div>
+        ) : scriptsError ? (
+          <div className="page-error" role="alert">
+            <Typography.Text>脚本列表加载失败，请重试。</Typography.Text>
+            <div style={{ marginTop: 10 }}>
+              <Button size="small" loading={scriptsLoading} onClick={loadScripts}>重试</Button>
+            </div>
+          </div>
+        ) : scripts.length === 0 ? (
           <Typography.Text type="secondary" style={{ display: 'block', padding: '8px 16px' }}>
             还没有脚本，点「新建」开始
           </Typography.Text>
@@ -214,10 +251,16 @@ export default function SqlLabPage() {
                       <span style={{ color: 'rgb(var(--orange-6))', marginLeft: 4 }} title="有未保存的修改">●</span>
                     )}
                   </span>
-                  <IconDelete
+                  <button
+                    type="button"
                     className="script-item-del"
+                    title="删除脚本"
+                    aria-label={`删除脚本：${s.name}`}
+                    style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', lineHeight: 1 }}
                     onClick={(e) => { e.stopPropagation(); confirmDelete(s); }}
-                  />
+                  >
+                    <IconDelete />
+                  </button>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-3)' }}>
                   {s.updatedAt.replace('T', ' ').slice(5, 16)}
@@ -261,6 +304,15 @@ export default function SqlLabPage() {
           {dirty ? <Tag color="orange">未保存</Tag> : currentId != null ? <Tag color="green">已保存</Tag> : null}
         </Space>
 
+        {datasourcesError && !datasourcesLoading && (
+          <div className="page-error" role="alert" style={{ marginBottom: 10, padding: '8px 12px' }}>
+            <Typography.Text>数据源加载失败，请重试。</Typography.Text>
+            <Button size="small" loading={datasourcesLoading} onClick={loadDatasources} style={{ marginLeft: 10 }}>
+              重试
+            </Button>
+          </div>
+        )}
+
         <div
           style={{
             border: '1px solid var(--color-border-2)',
@@ -285,19 +337,19 @@ export default function SqlLabPage() {
           />
         </div>
 
-        {error && (
-          <Typography.Text type="error" style={{ display: 'block', marginTop: 12, whiteSpace: 'pre-wrap', flexShrink: 0 }}>
-            {error}
-          </Typography.Text>
-        )}
-
         <div className="scroll-y" style={{ flex: 1, marginTop: 14, position: 'relative' }}>
           {running && <Spin style={{ display: 'block', margin: '24px auto' }} size={24} />}
 
           {!running && !result && !error && (
-            <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
+            <div className="page-empty" style={{ marginTop: 12 }}>
               编写 SQL 后点「运行」查看结果
-            </Typography.Text>
+            </div>
+          )}
+
+          {!running && error && (
+            <div className="page-error" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
+              {error}
+            </div>
           )}
 
           {result && !running && (
@@ -315,7 +367,11 @@ export default function SqlLabPage() {
                   耗时 {result.elapsedMs} ms
                 </Typography.Text>
               </Space>
-              {result.isQuery && (
+              {result.isQuery && result.rows.length === 0 ? (
+                <div className="page-empty" style={{ marginTop: 12, padding: 12 }}>
+                  查询结果为空
+                </div>
+              ) : result.isQuery && (
                 <Table
                   size="small"
                   data={result.rows.map((row, i) => ({ __i: i, row }))}
