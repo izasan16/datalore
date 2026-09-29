@@ -15,11 +15,16 @@ export default function ApiPubDetailPage() {
   const { id } = useParams();
   const apiId = Number(id);
   const [api, setApi] = useState<ApiPubInfo | null>(null);
+  const [apiLoading, setApiLoading] = useState(true);
+  const [apiLoadError, setApiLoadError] = useState(false);
   const [cols, setCols] = useState<ColumnDef[]>([]);
   const [apps, setApps] = useState<ApiAppInfo[]>([]);
   const [appsLoading, setAppsLoading] = useState(false);
   const [appsLoadError, setAppsLoadError] = useState(false);
   const [grantIds, setGrantIds] = useState<number[]>([]);
+  const [grantLoading, setGrantLoading] = useState(true);
+  const [grantLoadError, setGrantLoadError] = useState(false);
+  const [grantsLoaded, setGrantsLoaded] = useState(false);
   const [savingCfg, setSavingCfg] = useState(false);
   const [savingGrant, setSavingGrant] = useState(false);
   const [name, setName] = useState('');
@@ -39,24 +44,47 @@ export default function ApiPubDetailPage() {
     }
   }, []);
 
-  const reload = useCallback(async () => {
-    const a = await getApi(apiId);
-    setApi(a);
-    setName(a.name);
-    setColumns(a.columns);
-    setFilterColumns(a.filterColumns);
-    setMaxRows(a.maxRows);
+  const loadGrants = useCallback(async () => {
+    setGrantLoading(true);
+    setGrantLoadError(false);
     try {
-      setCols(await datasetColumns(a.datasetId));
+      const ids = await getApiGrants(apiId);
+      setGrantIds(ids);
+      setGrantsLoaded(true);
     } catch {
-      setCols([]);
+      setGrantLoadError(true);
+      setGrantsLoaded(false);
+    } finally {
+      setGrantLoading(false);
     }
-    await loadApps();
-    setGrantIds(await getApiGrants(apiId));
-  }, [apiId, loadApps]);
+  }, [apiId]);
+
+  const reload = useCallback(async () => {
+    setApiLoading(true);
+    setApiLoadError(false);
+    try {
+      const a = await getApi(apiId);
+      setApi(a);
+      setName(a.name);
+      setColumns(a.columns);
+      setFilterColumns(a.filterColumns);
+      setMaxRows(a.maxRows);
+      try {
+        setCols(await datasetColumns(a.datasetId));
+      } catch {
+        setCols([]);
+      }
+      setApiLoading(false);
+      await loadApps();
+      await loadGrants();
+    } catch {
+      setApiLoadError(true);
+      setApiLoading(false);
+    }
+  }, [apiId, loadApps, loadGrants]);
 
   useEffect(() => {
-    reload().catch(() => Message.error('加载失败'));
+    reload();
   }, [reload]);
 
   async function onSaveCfg() {
@@ -81,6 +109,7 @@ export default function ApiPubDetailPage() {
   }
 
   async function onSaveGrants() {
+    if (!grantsLoaded || grantLoading || grantLoadError) return;
     setSavingGrant(true);
     try {
       await setApiGrants(apiId, grantIds);
@@ -122,7 +151,28 @@ export default function ApiPubDetailPage() {
     });
   }
 
-  if (!api) return null;
+  if (apiLoading) {
+    return (
+      <div className="page-shell">
+        <section className="page-section">
+          <Typography.Text type="secondary">正在加载 API…</Typography.Text>
+        </section>
+      </div>
+    );
+  }
+
+  if (apiLoadError || !api) {
+    return (
+      <div className="page-shell">
+        <div className="page-error" role="alert">
+          <Typography.Text>API 详情加载失败，请重试。</Typography.Text>
+          <div style={{ marginTop: 10 }}>
+            <Button size="mini" onClick={reload}>重试</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const origin = window.location.origin;
   const sampleFilter = api.filterColumns.length ? `&${api.filterColumns[0]}=值` : '';
@@ -214,11 +264,28 @@ export default function ApiPubDetailPage() {
           </div>
           <div className="page-header-actions">
             <Button size="mini" onClick={() => nav('/apipub/apps')}>应用管理</Button>
-            <Button size="mini" type="primary" loading={savingGrant} onClick={onSaveGrants}>保存授权</Button>
+            <Button
+              size="mini"
+              type="primary"
+              loading={savingGrant}
+              disabled={!grantsLoaded || grantLoading || grantLoadError}
+              onClick={onSaveGrants}
+            >
+              保存授权
+            </Button>
           </div>
         </div>
         <div style={{ marginTop: 16 }}>
-          {appsLoadError && !appsLoading ? (
+          {grantLoadError && !grantLoading ? (
+            <div className="page-error" role="alert">
+              <Typography.Text>授权列表加载失败，请重试。</Typography.Text>
+              <div style={{ marginTop: 10 }}>
+                <Button size="mini" onClick={loadGrants}>重试</Button>
+              </div>
+            </div>
+          ) : grantLoading ? (
+            <Typography.Text type="secondary">正在加载授权…</Typography.Text>
+          ) : appsLoadError && !appsLoading ? (
             <div className="page-error" role="alert">
               <Typography.Text>应用列表加载失败，请重试。</Typography.Text>
               <div style={{ marginTop: 10 }}>
@@ -237,7 +304,11 @@ export default function ApiPubDetailPage() {
               </div>
             </div>
           ) : (
-            <CheckboxGroup value={grantIds} onChange={(v) => setGrantIds(v as number[])}>
+            <CheckboxGroup
+              value={grantIds}
+              disabled={!grantsLoaded || grantLoading || grantLoadError}
+              onChange={(v) => setGrantIds(v as number[])}
+            >
               <Space direction="vertical" style={{ width: '100%' }}>
                 {apps.map((a) => (
                   <Checkbox key={a.id} value={a.id}>
