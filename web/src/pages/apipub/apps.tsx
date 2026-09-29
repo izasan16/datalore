@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Input, Modal, Space, Table, Typography,
+  Button, Input, Message, Modal, Space, Table, Typography,
 } from '@arco-design/web-react';
 import { IconCopy, IconPlus, IconRefresh } from '@arco-design/web-react/icon';
-import { ApiAppInfo, createApp, deleteApp, listApps } from '../../api/apipub';
+import {
+  ApiAppInfo, createApp, deleteApp, listApps, revealAppSecret, updateApp,
+} from '../../api/apipub';
 
 export default function ApiAppsPage() {
   const nav = useNavigate();
@@ -13,6 +15,9 @@ export default function ApiAppsPage() {
   const [listError, setListError] = useState(false);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [renaming, setRenaming] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -55,10 +60,60 @@ export default function ApiAppsPage() {
     }
   }
 
-  function copy(text: string, label: string) {
-    navigator.clipboard.writeText(text).then(() => {
+  async function copy(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
       Modal.success({ title: label + ' 已复制', content: text });
-    });
+    } catch {
+      Message.error(`${label} 复制失败，请手动复制`);
+    }
+  }
+
+  function startRename(a: ApiAppInfo) {
+    setEditingId(a.id);
+    setEditingName(a.name);
+  }
+
+  function cancelRename() {
+    setEditingId(null);
+    setEditingName('');
+  }
+
+  async function onRename() {
+    if (editingId === null || !editingName.trim()) return;
+    setRenaming(true);
+    try {
+      await updateApp(editingId, editingName.trim());
+      cancelRename();
+      await reload();
+      Message.success('应用名称已更新');
+    } catch (e: any) {
+      Message.error(e.response?.data?.message || '重命名失败');
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  async function showSecret(a: ApiAppInfo) {
+    try {
+      const secret = await revealAppSecret(a.id);
+      Modal.info({
+        title: `「${a.name}」凭证`,
+        content: (
+          <div style={{ wordBreak: 'break-all' }}>
+            <p style={{ fontFamily: 'monospace' }}>AppKey: {a.appKey}</p>
+            <p style={{ fontFamily: 'monospace' }}>
+              AppSecret: {secret}{' '}
+              <Button size="mini" type="text" onClick={() => copy(secret, 'AppSecret')}>
+                复制
+              </Button>
+            </p>
+          </div>
+        ),
+      });
+    } catch (e: any) {
+      Message.error(e.response?.data?.message || '获取失败');
+    }
   }
 
   function onDelete(a: ApiAppInfo) {
@@ -96,7 +151,7 @@ export default function ApiAppsPage() {
         <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
           创建后获得 AppKey/Secret。AppSecret 只会在创建成功时显示一次，请及时保存。
         </Typography.Text>
-        <Space>
+        <Space wrap>
           <Input
             id="api-app-name"
             style={{ width: 260 }}
@@ -166,11 +221,27 @@ export default function ApiAppsPage() {
               },
               {
                 title: '操作',
-                width: 80,
-                render: (_, r) => (
-                  <Button type="text" size="mini" status="danger" onClick={() => onDelete(r)}>
-                    删除
-                  </Button>
+                width: 220,
+                render: (_, r) => editingId === r.id ? (
+                  <Space size={4} wrap>
+                    <Input
+                      size="mini"
+                      value={editingName}
+                      style={{ width: 120 }}
+                      onChange={setEditingName}
+                      onPressEnter={onRename}
+                    />
+                    <Button type="text" size="mini" loading={renaming} onClick={onRename}>保存</Button>
+                    <Button type="text" size="mini" disabled={renaming} onClick={cancelRename}>取消</Button>
+                  </Space>
+                ) : (
+                  <Space size={4} wrap>
+                    <Button type="text" size="mini" onClick={() => startRename(r)}>改名</Button>
+                    <Button type="text" size="mini" onClick={() => showSecret(r)}>查看密钥</Button>
+                    <Button type="text" size="mini" status="danger" onClick={() => onDelete(r)}>
+                      删除
+                    </Button>
+                  </Space>
                 ),
               },
             ]}

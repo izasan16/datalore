@@ -17,6 +17,8 @@ export default function ApiPubDetailPage() {
   const [api, setApi] = useState<ApiPubInfo | null>(null);
   const [cols, setCols] = useState<ColumnDef[]>([]);
   const [apps, setApps] = useState<ApiAppInfo[]>([]);
+  const [appsLoading, setAppsLoading] = useState(false);
+  const [appsLoadError, setAppsLoadError] = useState(false);
   const [grantIds, setGrantIds] = useState<number[]>([]);
   const [savingCfg, setSavingCfg] = useState(false);
   const [savingGrant, setSavingGrant] = useState(false);
@@ -24,6 +26,18 @@ export default function ApiPubDetailPage() {
   const [columns, setColumns] = useState<string[]>([]);
   const [filterColumns, setFilterColumns] = useState<string[]>([]);
   const [maxRows, setMaxRows] = useState(1000);
+
+  const loadApps = useCallback(async () => {
+    setAppsLoading(true);
+    setAppsLoadError(false);
+    try {
+      setApps(await listApps());
+    } catch {
+      setAppsLoadError(true);
+    } finally {
+      setAppsLoading(false);
+    }
+  }, []);
 
   const reload = useCallback(async () => {
     const a = await getApi(apiId);
@@ -37,9 +51,9 @@ export default function ApiPubDetailPage() {
     } catch {
       setCols([]);
     }
-    setApps(await listApps());
+    await loadApps();
     setGrantIds(await getApiGrants(apiId));
-  }, [apiId]);
+  }, [apiId, loadApps]);
 
   useEffect(() => {
     reload().catch(() => Message.error('加载失败'));
@@ -204,7 +218,16 @@ export default function ApiPubDetailPage() {
           </div>
         </div>
         <div style={{ marginTop: 16 }}>
-          {apps.length === 0 ? (
+          {appsLoadError && !appsLoading ? (
+            <div className="page-error" role="alert">
+              <Typography.Text>应用列表加载失败，请重试。</Typography.Text>
+              <div style={{ marginTop: 10 }}>
+                <Button size="mini" onClick={loadApps}>重试</Button>
+              </div>
+            </div>
+          ) : appsLoading ? (
+            <Typography.Text type="secondary">正在加载应用…</Typography.Text>
+          ) : apps.length === 0 ? (
             <div className="page-empty">
               <Typography.Text>还没有应用，先创建一个调用方应用。</Typography.Text>
               <div style={{ marginTop: 10 }}>
