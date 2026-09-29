@@ -12,3 +12,4 @@ logs/
 tmp-server.log
 tmp-server-err.log
 tmp-vite.log
+.worktrees/
