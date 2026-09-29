@@ -210,7 +210,12 @@ export default function SqlLabPage() {
           </Button>
         }
       >
-        {scriptsError && !scriptsLoading ? (
+        {scriptsLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
+            <Spin size={16} />
+            <Typography.Text type="secondary">正在加载脚本…</Typography.Text>
+          </div>
+        ) : scriptsError ? (
           <div className="page-error" role="alert">
             <Typography.Text>脚本列表加载失败，请重试。</Typography.Text>
             <div style={{ marginTop: 10 }}>
