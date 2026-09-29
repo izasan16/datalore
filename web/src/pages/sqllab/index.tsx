@@ -18,7 +18,7 @@ export default function SqlLabPage() {
   const [baseline, setBaseline] = useState({ name: '', content: 'select 1;' });
   const [dsList, setDsList] = useState<DataSourceInfo[]>([]);
   const [datasourceId, setDatasourceId] = useState<number | undefined>();
-  const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [scriptsLoading, setScriptsLoading] = useState(true);
   const [scriptsError, setScriptsError] = useState(false);
   const [datasourcesLoading, setDatasourcesLoading] = useState(false);
   const [datasourcesError, setDatasourcesError] = useState(false);
