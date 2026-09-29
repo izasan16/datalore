@@ -321,7 +321,11 @@ export default function SqlLabPage() {
                   耗时 {result.elapsedMs} ms
                 </Typography.Text>
               </Space>
-              {result.isQuery && (
+              {result.isQuery && result.rows.length === 0 ? (
+                <div className="page-empty" style={{ marginTop: 12, padding: 12 }}>
+                  查询结果为空
+                </div>
+              ) : result.isQuery && (
                 <Table
                   size="small"
                   data={result.rows.map((row, i) => ({ __i: i, row }))}
