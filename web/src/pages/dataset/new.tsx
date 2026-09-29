@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Card, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
+  Button, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
 } from '@arco-design/web-react';
 import { IconArrowRise, IconUpload } from '@arco-design/web-react/icon';
 import { ColumnDef, confirmDataset, uploadDataset } from '../../api/dataset';
@@ -77,57 +77,69 @@ export default function DatasetNewPage() {
   }
 
   return (
-    <Card
-      title="上传数据"
-      style={{ maxWidth: 880, margin: '0 auto' }}
-      extra={<Button type="text" onClick={() => nav('/datamanage')}>返回</Button>}
-    >
-      <Steps current={step} style={{ marginBottom: 28 }}>
-        <Steps.Step title="选择文件" />
-        <Steps.Step title="选择入库位置" />
-      </Steps>
+    <div className="page-shell">
+      <div className="page-header">
+        <div className="page-header-main">
+          <Typography.Title heading={4} style={{ margin: 0 }}>
+            上传数据
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            上传文件并选择数据源，将数据导入为可管理的数据集
+          </Typography.Text>
+        </div>
+        <div className="page-header-actions">
+          <Button type="text" onClick={() => nav('/datamanage')}>返回列表</Button>
+        </div>
+      </div>
 
-      {step === 0 && (
-        <Upload
-          drag
-          multiple={false}
-          limit={1}
-          customRequest={(option) => {
-            handleUpload(option.file as File);
-            return { abort: () => {} };
-          }}
-          accept=".csv,.xlsx,.xls,.txt"
-          showUploadList={false}
-          disabled={uploading}
-        >
-          <div style={{ textAlign: 'center', padding: '72px 0' }}>
-            <div style={{ marginBottom: 16 }}>
-              <IconUpload style={{ fontSize: 40, color: 'var(--daaspro-primary)' }} />
+      <section className="page-section" style={{ maxWidth: 960, width: '100%', margin: '0 auto' }}>
+        <Steps current={step} style={{ marginBottom: 28 }}>
+          <Steps.Step title="选择文件" />
+          <Steps.Step title="选择入库位置" />
+        </Steps>
+
+        {step === 0 && (
+          <Upload
+            drag
+            multiple={false}
+            limit={1}
+            customRequest={(option) => {
+              handleUpload(option.file as File);
+              return { abort: () => {} };
+            }}
+            accept=".csv,.xlsx,.xls,.txt"
+            showUploadList={false}
+            disabled={uploading}
+          >
+            <div style={{ textAlign: 'center', padding: '72px 0' }}>
+              <div style={{ marginBottom: 16 }}>
+                <IconUpload style={{ fontSize: 40, color: 'var(--daaspro-primary)' }} />
+              </div>
+              <Typography.Title heading={6} style={{ marginTop: 0 }}>
+                点击或拖拽文件到此处上传
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                支持 CSV / XLSX，单文件不超过 20MB；首行为表头
+              </Typography.Text>
             </div>
-            <Typography.Title heading={6} style={{ marginTop: 0 }}>
-              点击或拖拽文件到此处上传
-            </Typography.Title>
-            <Typography.Text type="secondary">
-              支持 CSV / XLSX，单文件不超过 20MB；首行为表头
-            </Typography.Text>
-          </div>
-        </Upload>
-      )}
+          </Upload>
+        )}
 
-      {step === 1 && result && (
-        <ImportForm
-          result={result}
-          importing={importing}
-          defaultName={fileRef?.name?.replace(/\.(csv|xlsx|xls|txt)$/i, '') || ''}
-          onConfirm={onConfirm}
-          onReset={() => {
-            setResult(null);
-            setStep(0);
-            setFileRef(null);
-          }}
-        />
-      )}
-    </Card>
+        {step === 1 && result && (
+          <ImportForm
+            result={result}
+            importing={importing}
+            defaultName={fileRef?.name?.replace(/\.(csv|xlsx|xls|txt)$/i, '') || ''}
+            onConfirm={onConfirm}
+            onReset={() => {
+              setResult(null);
+              setStep(0);
+              setFileRef(null);
+            }}
+          />
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -179,18 +191,20 @@ function ImportForm({
         ))}
       </Space>
 
-      <Table
-        data={result.previewRows.map((row, i) => ({ __i: i, row }))}
-        rowKey="__i"
-        size="small"
-        pagination={{ pageSize: 10 }}
-        columns={result.columns.map((c, idx) => ({
-          title: `${c.name}`,
-          render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
-          ellipsis: true,
-          width: 140,
-        }))}
-      />
+      <div className="bounded-checks">
+        <Table
+          data={result.previewRows.map((row, i) => ({ __i: i, row }))}
+          rowKey="__i"
+          size="small"
+          pagination={{ pageSize: 10 }}
+          columns={result.columns.map((c, idx) => ({
+            title: `${c.name}`,
+            render: (_: unknown, record: { row: string[] }) => record.row[idx] ?? '',
+            ellipsis: true,
+            width: 140,
+          }))}
+        />
+      </div>
       <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
         仅展示前 {result.previewRows.length} 行预览
       </Typography.Text>
@@ -203,7 +217,7 @@ function ImportForm({
         initialValues={{ mode: 'new', name: defaultName } as any}
       >
         <Row gutter={16}>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               label="数据名称"
               field="name"
@@ -213,7 +227,7 @@ function ImportForm({
               <Input placeholder="如：销售明细" disabled={mode === 'append'} />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
               <Select
                 options={dsOptions}
@@ -224,7 +238,7 @@ function ImportForm({
               />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item label="导入方式" field="mode">
               <Select
                 onChange={(v) => setMode(v as 'new' | 'append')}
@@ -236,7 +250,7 @@ function ImportForm({
             </Form.Item>
           </Col>
           {mode === 'append' && (
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item
                 label="目标表"
                 field="existingTable"

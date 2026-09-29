@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Card, Drawer, Message, Modal, Space,
+  Button, Drawer, Message, Modal, Space,
   Table, Tag, Typography,
 } from '@arco-design/web-react';
 import { IconPlus, IconRefresh } from '@arco-design/web-react/icon';
@@ -91,20 +91,28 @@ export default function DatasourcePage() {
   }
 
   return (
-    <Card
-      title="数据源"
-      className="card-fill"
-      style={{ height: '100%' }}
-      extra={
-        <Space>
-          <Button icon={<IconRefresh />} onClick={reload} />
+    <div className="page-shell">
+      <div className="page-header">
+        <div className="page-header-main">
+          <Typography.Title heading={4} style={{ margin: 0 }}>
+            数据源
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            接入外部数据库并浏览库表结构
+          </Typography.Text>
+        </div>
+        <div className="page-header-actions">
+          <Button icon={<IconRefresh />} onClick={reload}>刷新</Button>
           <Button type="primary" icon={<IconPlus />} onClick={() => nav('/datasource/new')}>
             新建数据源
           </Button>
-        </Space>
-      }
-    >
-      <div className="scroll-y">
+        </div>
+      </div>
+
+      <section className="page-section" aria-labelledby="datasource-list-title">
+        <Typography.Title id="datasource-list-title" heading={6} style={{ margin: '0 0 14px' }}>
+          已接入的数据源
+        </Typography.Title>
         <Table
           loading={loading}
           data={list}
@@ -141,11 +149,18 @@ export default function DatasourcePage() {
           ]}
         />
         {list.length === 0 && !loading && (
-          <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
-            还没有数据源，点右上角「新建数据源」接入外部库
-          </Typography.Text>
+          <div className="page-empty" style={{ marginTop: 12 }}>
+            <Typography.Text type="secondary">
+              还没有数据源，先接入一个外部数据库吧
+            </Typography.Text>
+            <div style={{ marginTop: 12 }}>
+              <Button type="primary" size="small" icon={<IconPlus />} onClick={() => nav('/datasource/new')}>
+                新建数据源
+              </Button>
+            </div>
+          </div>
         )}
-      </div>
+      </section>
 
       <Drawer
         title={browseDs ? `表浏览 · ${browseDs.name}` : ''}
@@ -189,6 +204,6 @@ export default function DatasourcePage() {
           </div>
         )}
       </Drawer>
-    </Card>
+    </div>
   );
 }

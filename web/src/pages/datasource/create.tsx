@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Form, Grid, Input, InputNumber, Message, Select, Space } from '@arco-design/web-react';
+import { Button, Form, Grid, Input, InputNumber, Message, Select, Space, Typography } from '@arco-design/web-react';
 import { createDatasource } from '../../api/datasource';
 import { http } from '../../api/http';
 
@@ -67,67 +67,86 @@ export default function DatasourceCreatePage() {
   }
 
   return (
-    <Card
-      title="新建数据源"
-      style={{ maxWidth: 720, margin: '0 auto' }}
-      extra={
-        <Button type="text" onClick={() => nav('/datasource')}>
-          返回列表
-        </Button>
-      }
-    >
-      <Form form={form} onSubmit={onSubmit} layout="vertical" initialValues={{ type: 'postgresql' }}>
-        <Row gutter={16}>
-          <Col span={12}>
-            <Form.Item label="名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
-              <Input placeholder="如：业务库" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="类型" field="type" rules={[{ required: true, message: '请选择类型' }]}>
-              <Select options={TYPE_OPTIONS} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="主机" field="host" rules={[{ required: true, message: '请输入主机' }]}>
-              <Input placeholder="如：192.168.1.10" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="端口（留空用默认）" field="port">
-              <InputNumber placeholder="默认端口自动填" style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="数据库" field="databaseName" rules={[{ required: true, message: '请输入数据库名' }]}>
-              <Input placeholder="database" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="Schema（PG 可选）" field="schemaName">
-              <Input placeholder="public" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="用户名" field="username" rules={[{ required: true, message: '请输入用户名' }]}>
-              <Input placeholder="用户名" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
-              <Input.Password placeholder="密码" />
-            </Form.Item>
-          </Col>
-        </Row>
-        <Space style={{ marginTop: 8 }}>
-          <Button onClick={onTest} loading={testing}>
-            测试连接
+    <div className="page-shell">
+      <div className="page-header">
+        <div className="page-header-main">
+          <Typography.Title heading={4} style={{ margin: 0 }}>
+            新建数据源
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            填写数据库连接信息，保存前可先测试连通性
+          </Typography.Text>
+        </div>
+        <div className="page-header-actions">
+          <Button type="text" onClick={() => nav('/datasource')}>
+            返回列表
           </Button>
-          <Button type="primary" htmlType="submit" loading={saving}>
-            保存
-          </Button>
-        </Space>
-      </Form>
-    </Card>
+        </div>
+      </div>
+
+      <section className="page-section" style={{ maxWidth: 800, width: '100%', margin: '0 auto' }}>
+        <Form form={form} onSubmit={onSubmit} layout="vertical" initialValues={{ type: 'postgresql' }}>
+          <Typography.Title heading={6} style={{ margin: '0 0 16px' }}>
+            基本信息
+          </Typography.Title>
+          <Row gutter={[16, 0]}>
+            <Col xs={24} sm={12}>
+              <Form.Item label="名称" field="name" rules={[{ required: true, message: '请输入名称' }]}>
+                <Input placeholder="如：业务库" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="类型" field="type" rules={[{ required: true, message: '请选择类型' }]}>
+                <Select options={TYPE_OPTIONS} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Typography.Title heading={6} style={{ margin: '8px 0 16px' }}>
+            连接信息
+          </Typography.Title>
+          <Row gutter={[16, 0]}>
+            <Col xs={24} sm={12}>
+              <Form.Item label="主机" field="host" rules={[{ required: true, message: '请输入主机' }]}>
+                <Input placeholder="如：192.168.1.10" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="端口（留空用默认）" field="port">
+                <InputNumber placeholder="默认端口自动填" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="数据库" field="databaseName" rules={[{ required: true, message: '请输入数据库名' }]}>
+                <Input placeholder="database" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Schema（PG 可选）" field="schemaName">
+                <Input placeholder="public" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="用户名" field="username" rules={[{ required: true, message: '请输入用户名' }]}>
+                <Input placeholder="用户名" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
+                <Input.Password placeholder="密码" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Space style={{ marginTop: 8 }} wrap>
+            <Button onClick={onTest} loading={testing}>
+              测试连接
+            </Button>
+            <Button type="primary" htmlType="submit" loading={saving}>
+              保存
+            </Button>
+          </Space>
+        </Form>
+      </section>
+    </div>
   );
 }
