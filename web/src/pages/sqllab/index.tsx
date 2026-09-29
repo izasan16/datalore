@@ -214,10 +214,16 @@ export default function SqlLabPage() {
                       <span style={{ color: 'rgb(var(--orange-6))', marginLeft: 4 }} title="有未保存的修改">●</span>
                     )}
                   </span>
-                  <IconDelete
+                  <button
+                    type="button"
                     className="script-item-del"
+                    title="删除脚本"
+                    aria-label={`删除脚本：${s.name}`}
+                    style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', lineHeight: 1 }}
                     onClick={(e) => { e.stopPropagation(); confirmDelete(s); }}
-                  />
+                  >
+                    <IconDelete />
+                  </button>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-3)' }}>
                   {s.updatedAt.replace('T', ' ').slice(5, 16)}
@@ -285,19 +291,19 @@ export default function SqlLabPage() {
           />
         </div>
 
-        {error && (
-          <Typography.Text type="error" style={{ display: 'block', marginTop: 12, whiteSpace: 'pre-wrap', flexShrink: 0 }}>
-            {error}
-          </Typography.Text>
-        )}
-
         <div className="scroll-y" style={{ flex: 1, marginTop: 14, position: 'relative' }}>
           {running && <Spin style={{ display: 'block', margin: '24px auto' }} size={24} />}
 
           {!running && !result && !error && (
-            <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
+            <div className="page-empty" style={{ marginTop: 12 }}>
               编写 SQL 后点「运行」查看结果
-            </Typography.Text>
+            </div>
+          )}
+
+          {!running && error && (
+            <div className="page-error" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
+              {error}
+            </div>
           )}
 
           {result && !running && (
