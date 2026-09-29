@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Button, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
@@ -92,7 +92,7 @@ export default function DatasetNewPage() {
         </div>
       </div>
 
-      <section className="page-section" style={{ maxWidth: 960, width: '100%', margin: '0 auto' }}>
+      <section className="page-section natural-height" style={{ maxWidth: 960, width: '100%', margin: '0 auto' }}>
         <Steps current={step} style={{ marginBottom: 28 }}>
           <Steps.Step title="选择文件" />
           <Steps.Step title="选择入库位置" />
@@ -154,12 +154,19 @@ function ImportForm({
 }) {
   const [form] = Form.useForm();
   const [dsOptions, setDsOptions] = useState<{ value: number; label: string }[]>([]);
+  const [datasourceLoading, setDatasourceLoading] = useState(false);
+  const [datasourceError, setDatasourceError] = useState(false);
   const [tableOptions, setTableOptions] = useState<{ value: string; label: string }[]>([]);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [tableError, setTableError] = useState(false);
   const [mode, setMode] = useState<'new' | 'append'>('new');
   const [watchDs, setWatchDs] = useState<number>();
 
-  useEffect(() => {
-    listDatasources().then((list) => {
+  const loadDatasources = useCallback(async () => {
+    setDatasourceLoading(true);
+    setDatasourceError(false);
+    try {
+      const list = await listDatasources();
       setDsOptions(list.map((d) => ({
         value: d.id,
         label: d.builtin ? `${d.name}（内置，可写入）` : `${d.name}（${d.type}，MVP 只读）`,
@@ -169,16 +176,42 @@ function ImportForm({
         form.setFieldValue('datasourceId', builtin.id);
         setWatchDs(builtin.id);
       }
-    });
+    } catch (e: any) {
+      setDatasourceError(true);
+      Message.error(e.response?.data?.message || '数据源加载失败');
+    } finally {
+      setDatasourceLoading(false);
+    }
   }, [form]);
 
-  useEffect(() => {
-    if (watchDs) {
-      listTables(watchDs)
-        .then((tables) => setTableOptions(tables.map((t) => ({ value: t.name, label: t.name }))))
-        .catch(() => setTableOptions([]));
+  const loadTables = useCallback(async (datasourceId: number) => {
+    setTableLoading(true);
+    setTableError(false);
+    try {
+      const tables = await listTables(datasourceId);
+      setTableOptions(tables.map((t) => ({ value: t.name, label: t.name })));
+    } catch (e: any) {
+      setTableOptions([]);
+      setTableError(true);
+      Message.error(e.response?.data?.message || '目标表加载失败');
+    } finally {
+      setTableLoading(false);
     }
-  }, [watchDs]);
+  }, []);
+
+  useEffect(() => {
+    loadDatasources();
+  }, [loadDatasources]);
+
+  useEffect(() => {
+    if (!watchDs) {
+      setTableOptions([]);
+      setTableError(false);
+      return;
+    }
+
+    loadTables(watchDs);
+  }, [loadTables, watchDs]);
 
   return (
     <div>
@@ -231,12 +264,21 @@ function ImportForm({
             <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
               <Select
                 options={dsOptions}
+                loading={datasourceLoading}
                 onChange={(v) => {
                   setWatchDs(v as number);
                   form.setFieldValue('existingTable', undefined);
                 }}
               />
             </Form.Item>
+            {datasourceError && (
+              <div className="page-error" role="alert" style={{ marginTop: -12, padding: '8px 12px', textAlign: 'left' }}>
+                <Typography.Text>数据源加载失败，请重试。</Typography.Text>
+                <Button size="mini" type="text" loading={datasourceLoading} onClick={loadDatasources}>
+                  重试
+                </Button>
+              </div>
+            )}
           </Col>
           <Col xs={24} sm={12}>
             <Form.Item label="导入方式" field="mode">
@@ -257,8 +299,16 @@ function ImportForm({
                 rules={[{ required: true, message: '请选择目标表' }]}
                 extra="目标表列名需与上传文件表头完全一致"
               >
-                <Select options={tableOptions} placeholder="选择已有表" showSearch />
+                <Select options={tableOptions} loading={tableLoading} placeholder="选择已有表" showSearch />
               </Form.Item>
+              {tableError && (
+                <div className="page-error" role="alert" style={{ marginTop: -12, padding: '8px 12px', textAlign: 'left' }}>
+                  <Typography.Text>目标表加载失败，请重试。</Typography.Text>
+                  <Button size="mini" type="text" loading={tableLoading} onClick={() => watchDs && loadTables(watchDs)}>
+                    重试
+                  </Button>
+                </div>
+              )}
             </Col>
           )}
         </Row>

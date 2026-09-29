@@ -21,6 +21,7 @@ export default function DatasourcePage() {
   const nav = useNavigate();
   const [list, setList] = useState<DataSourceInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState(false);
   const [browseDs, setBrowseDs] = useState<DataSourceInfo | null>(null);
   const [tables, setTables] = useState<{ name: string }[]>([]);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
@@ -28,9 +29,11 @@ export default function DatasourcePage() {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setListError(false);
     try {
       setList(await listDatasources());
     } catch (e: any) {
+      setListError(true);
       Message.error(e.response?.data?.message || '加载失败');
     } finally {
       setLoading(false);
@@ -109,56 +112,67 @@ export default function DatasourcePage() {
         </div>
       </div>
 
-      <section className="page-section" aria-labelledby="datasource-list-title">
+      <section className="page-section natural-height" aria-labelledby="datasource-list-title">
         <Typography.Title id="datasource-list-title" heading={6} style={{ margin: '0 0 14px' }}>
           已接入的数据源
         </Typography.Title>
-        <Table
-          loading={loading}
-          data={list}
-          rowKey="id"
-          pagination={false}
-          columns={[
-            {
-              title: '名称', dataIndex: 'name',
-              render: (v: string, row: DataSourceInfo) => (
-                <Space>
-                  {v}
-                  {row.builtin && <Tag color="arcoblue" size="small">内置</Tag>}
-                </Space>
-              ),
-            },
-            { title: '类型', dataIndex: 'type', width: 130, render: (t: string) => TYPE_LABEL[t] || t },
-            {
-              title: '连接', dataIndex: 'host', width: 240,
-              render: (_: string, row: DataSourceInfo) =>
-                row.builtin ? `平台内置 · ${row.schemaName}` : `${row.host}:${row.port}/${row.databaseName}`,
-            },
-            {
-              title: '操作', width: 240,
-              render: (_: unknown, row: DataSourceInfo) => (
-                <Space>
-                  <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
-                  <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
-                  {!row.builtin && (
-                    <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
-                  )}
-                </Space>
-              ),
-            },
-          ]}
-        />
-        {list.length === 0 && !loading && (
-          <div className="page-empty" style={{ marginTop: 12 }}>
-            <Typography.Text type="secondary">
-              还没有数据源，先接入一个外部数据库吧
-            </Typography.Text>
-            <div style={{ marginTop: 12 }}>
-              <Button type="primary" size="small" icon={<IconPlus />} onClick={() => nav('/datasource/new')}>
-                新建数据源
-              </Button>
+        {listError && !loading ? (
+          <div className="page-error" role="alert">
+            <Typography.Text>数据源列表加载失败，请重试。</Typography.Text>
+            <div style={{ marginTop: 10 }}>
+              <Button size="small" onClick={reload}>重试</Button>
             </div>
           </div>
+        ) : (
+          <>
+            <Table
+              loading={loading}
+              data={list}
+              rowKey="id"
+              pagination={false}
+              columns={[
+                {
+                  title: '名称', dataIndex: 'name',
+                  render: (v: string, row: DataSourceInfo) => (
+                    <Space>
+                      {v}
+                      {row.builtin && <Tag color="arcoblue" size="small">内置</Tag>}
+                    </Space>
+                  ),
+                },
+                { title: '类型', dataIndex: 'type', width: 130, render: (t: string) => TYPE_LABEL[t] || t },
+                {
+                  title: '连接', dataIndex: 'host', width: 240,
+                  render: (_: string, row: DataSourceInfo) =>
+                    row.builtin ? `平台内置 · ${row.schemaName}` : `${row.host}:${row.port}/${row.databaseName}`,
+                },
+                {
+                  title: '操作', width: 240,
+                  render: (_: unknown, row: DataSourceInfo) => (
+                    <Space>
+                      <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
+                      <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
+                      {!row.builtin && (
+                        <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
+                      )}
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+            {list.length === 0 && !loading && (
+              <div className="page-empty" style={{ marginTop: 12 }}>
+                <Typography.Text type="secondary">
+                  还没有数据源，先接入一个外部数据库吧
+                </Typography.Text>
+                <div style={{ marginTop: 12 }}>
+                  <Button type="primary" size="small" icon={<IconPlus />} onClick={() => nav('/datasource/new')}>
+                    新建数据源
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
 

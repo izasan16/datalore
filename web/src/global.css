@@ -226,6 +226,11 @@ body,
   border-radius: 8px;
 }
 
+.natural-height {
+  height: auto;
+  flex: 0 0 auto;
+}
+
 .page-empty,
 .page-error {
   padding: 20px;
