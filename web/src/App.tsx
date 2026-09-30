@@ -9,6 +9,10 @@ import DatasourceCreatePage from './pages/datasource/create';
 import DatasetPage from './pages/dataset';
 import DatasetNewPage from './pages/dataset/new';
 import SqlLabPage from './pages/sqllab';
+import ApiPubPage from './pages/apipub';
+import ApiPubNewPage from './pages/apipub/new';
+import ApiPubDetailPage from './pages/apipub/detail';
+import ApiAppsPage from './pages/apipub/apps';
 
 function NotFound() {
   const nav = useNavigate();
@@ -39,6 +43,10 @@ export default function App() {
         <Route path="/datamanage" element={<DatasetPage />} />
         <Route path="/datamanage/new" element={<DatasetNewPage />} />
         <Route path="/sqllab" element={<SqlLabPage />} />
+        <Route path="/apipub" element={<ApiPubPage />} />
+        <Route path="/apipub/new" element={<ApiPubNewPage />} />
+        <Route path="/apipub/apps" element={<ApiAppsPage />} />
+        <Route path="/apipub/:id" element={<ApiPubDetailPage />} />
       </Route>
       {/* 旧路径兼容 */}
       <Route path="/dataset" element={<Navigate to="/datamanage" replace />} />
