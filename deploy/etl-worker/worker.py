@@ -28,12 +28,29 @@ PORT = int(os.environ.get("DAASPRO_WORKER_PORT", "8090"))
 LOG = logging.getLogger("etl-worker")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 PARAM = re.compile(r"(?<!:):([A-Za-z_][A-Za-z0-9_]*)")
+CREATE_TABLE = re.compile(
+    r"(?is)^\s*(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)"
+    r"((?:\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*)(?:\s*\.\s*(?:\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*))?)"
+    r"(\s*\()(.*)$", re.S)
 
 
 def identifier(value: str) -> str:
     if not value or not IDENT.fullmatch(value):
         raise ValueError("invalid identifier")
     return '"' + value.replace('"', '""') + '"'
+
+
+def qualify_create_table(ddl: str, default_schema: str) -> str:
+    """未限定 schema 的 CREATE TABLE 补上默认 schema；统一加 IF NOT EXISTS 语义。"""
+    match = CREATE_TABLE.match(ddl.strip())
+    if not match:
+        raise ValueError("建表语句必须是单条 CREATE TABLE")
+    prefix, name, open_paren, tail = match.groups()
+    if "IF NOT EXISTS" not in prefix.upper():
+        prefix = re.sub(r"(?i)CREATE\s+TABLE\s+", "CREATE TABLE IF NOT EXISTS ", prefix)
+    if "." in name:
+        return f"{prefix}{name}{open_paren}{tail}"
+    return f"{prefix or ''}{identifier(default_schema)}.{name}{open_paren}{tail}"
 
 
 class Run:
@@ -167,8 +184,10 @@ class Worker:
                 src.execute(executable_select, params)
                 target_cols = ", ".join(identifier(f["target"]) for f in fields)
                 if mapping.get("targetMode", "CREATE") == "CREATE":
-                    defs = ", ".join(f"{identifier(f['target'])} {self._type(f.get('type'))}" for f in fields)
-                    dst.execute(f"CREATE TABLE IF NOT EXISTS {target_schema}.{target_table} ({defs})")
+                    ddl = mapping.get("createDdl")
+                    if not ddl:
+                        raise ValueError("自动建表必须提供建表语句")
+                    dst.execute(qualify_create_table(ddl, target.get("schema") or "public"))
                 mode = mapping.get("writeMode", "APPEND")
                 if mode == "OVERWRITE":
                     dst.execute(f"TRUNCATE TABLE {target_schema}.{target_table}")
@@ -192,9 +211,7 @@ class Worker:
             source_conn.close()
             target_conn.close()
 
-    @staticmethod
-    def _type(value: str | None) -> str:
-        return {"bigint": "BIGINT", "numeric": "NUMERIC", "timestamp": "TIMESTAMP", "date": "DATE", "boolean": "BOOLEAN", "text": "TEXT"}.get(value or "text", "TEXT")
+    # NOTE: DDL 由后端 EtlValidation.parseCreateTable 校验后原样下发，这里不做二次解析。
 
 
 WORKER = Worker()

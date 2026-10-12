@@ -49,4 +49,38 @@ class EtlValidationTest {
                 7L, "public", "orders"))
                 .isInstanceOf(BizException.class).hasMessageContaining("相同");
     }
+
+    @Test
+    void parsesCreateTableWithSchemaAndColumnTypes() {
+        var parsed = EtlValidation.parseCreateTable(
+                "CREATE TABLE IF NOT EXISTS staging.orders_backup (id BIGINT, city VARCHAR(50), amount NUMERIC(10, 2), created_at TIMESTAMP)");
+
+        assertThat(parsed.schema()).isEqualTo("staging");
+        assertThat(parsed.table()).isEqualTo("orders_backup");
+        assertThat(parsed.columns()).extracting(EtlValidation.ParsedColumn::name)
+                .containsExactly("id", "city", "amount", "created_at");
+        assertThat(parsed.columns()).extracting(EtlValidation.ParsedColumn::platformType)
+                .containsExactly("bigint", "text", "numeric", "timestamp");
+    }
+
+    @Test
+    void parseCreateTableSkipsConstraintsAndRejectsInvalidStatements() {
+        var parsed = EtlValidation.parseCreateTable(
+                "create table orders_new (id bigint, name text, primary key (id))");
+
+        assertThat(parsed.schema()).isNull();
+        assertThat(parsed.table()).isEqualTo("orders_new");
+        assertThat(parsed.columns()).extracting(EtlValidation.ParsedColumn::name).containsExactly("id", "name");
+
+        assertThatThrownBy(() -> EtlValidation.parseCreateTable("CREATE TABLE a (id bigint); DROP TABLE b"))
+                .isInstanceOf(BizException.class).hasMessageContaining("单条");
+        assertThatThrownBy(() -> EtlValidation.parseCreateTable("INSERT INTO t VALUES (1)"))
+                .isInstanceOf(BizException.class).hasMessageContaining("CREATE TABLE");
+        assertThatThrownBy(() -> EtlValidation.parseCreateTable("CREATE TABLE a (id bigint"))
+                .isInstanceOf(BizException.class).hasMessageContaining("括号");
+        assertThatThrownBy(() -> EtlValidation.parseCreateTable("CREATE TABLE a ()"))
+                .isInstanceOf(BizException.class).hasMessageContaining("至少需要");
+        assertThatThrownBy(() -> EtlValidation.parseCreateTable("CREATE TABLE a (id bigint, id text)"))
+                .isInstanceOf(BizException.class).hasMessageContaining("重复");
+    }
 }

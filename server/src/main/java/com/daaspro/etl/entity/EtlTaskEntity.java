@@ -21,6 +21,18 @@ public class EtlTaskEntity {
     private LocalDateTime onceAt;
     private String cronExpression;
     private LocalDateTime scheduleEndAt;
+    private String inputType;
+    private String sourceSchema;
+    private String sourceTable;
+    private String selectSql;
+    private String parametersJson;
+    private String targetSchema;
+    private String targetTable;
+    private String targetTableMode;
+    private String writeMode;
+    private String fieldMappingsJson;
+    private String upsertKeysJson;
+    private String createTableDdl;
     private Integer maxRetries;
     private Integer retryIntervalSeconds;
     private Integer configVersion;

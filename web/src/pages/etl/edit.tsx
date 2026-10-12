@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Button, DatePicker, Form, Input, Message, Select, Space, Steps, Typography } from '@arco-design/web-react';
+import { Button, DatePicker, Form, Input, Message, Select, Space, Steps, Tag, Typography } from '@arco-design/web-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  createEtlMapping, createEtlTask, deleteEtlMapping, EtlMapping, EtlTask,
-  getEtlTask, listEtlMappings, updateEtlMapping, updateEtlTask,
+  createEtlTask, EtlTask, getEtlTask, parseEtlDdl, ParsedDdl, updateEtlTask,
 } from '../../api/etl';
 import {
   ColumnInfo, DataSourceInfo, listColumns, listDatasources, listSchemas, listTables,
@@ -40,8 +39,8 @@ export default function EtlEditPage() {
   const [step, setStep] = useState(0);
   const [sources, setSources] = useState<DataSourceInfo[]>([]);
   const [task, setTask] = useState<EtlTask | null>(null);
-  const [mappings, setMappings] = useState<EtlMapping[]>([]);
   const [saving, setSaving] = useState(false);
+  const [parsedDdl, setParsedDdl] = useState<ParsedDdl | null>(null);
   const [srcSchemas, setSrcSchemas] = useState<{ name: string }[]>([]);
   const [tgtSchemas, setTgtSchemas] = useState<{ name: string }[]>([]);
   const [srcTables, setSrcTables] = useState<{ name: string }[]>([]);
@@ -73,9 +72,7 @@ export default function EtlEditPage() {
           retryIntervalSeconds: 60,
         });
         setSchedType(loaded.scheduleType);
-        const ms = await listEtlMappings(Number(id));
-        setMappings(ms);
-        if (ms.length > 0) await restoreMapping(ms[0]);
+        if (loaded.hasMapping) await restoreMapping(loaded);
       }).catch(() => Message.error('任务加载失败'));
     }
   }, [id]);
@@ -100,46 +97,49 @@ export default function EtlEditPage() {
     }).catch(() => Message.error('字段加载失败'));
   }
 
-  async function restoreMapping(m: EtlMapping) {
+  async function restoreMapping(m: EtlTask) {
     const srcDs = form.getFieldValue('sourceDatasourceId');
     const tgtDs = form.getFieldValue('targetDatasourceId');
-    setMapInputType(m.inputType);
-    setMapWriteMode(m.writeMode);
-    setMapTargetMode(m.targetTableMode);
+    setMapInputType(m.inputType || 'TABLE');
+    setMapWriteMode(m.writeMode || 'APPEND');
+    setMapTargetMode(m.targetTableMode || 'CREATE');
+    setParsedDdl(null);
     let upsertKeys: string[] = [];
     try { upsertKeys = JSON.parse(m.upsertKeysJson || '[]'); } catch { upsertKeys = []; }
     mappingForm.setFieldsValue({
-      inputType: m.inputType,
-      writeMode: m.writeMode,
-      targetTableMode: m.targetTableMode,
+      inputType: m.inputType || 'TABLE',
+      writeMode: m.writeMode || 'APPEND',
+      targetTableMode: m.targetTableMode || 'CREATE',
       sourceSchema: m.sourceSchema,
       sourceTable: m.sourceTable,
       targetSchema: m.targetSchema,
       targetTable: m.targetTable,
       selectSql: m.selectSql,
+      createTableDdl: m.createTableDdl,
       upsertKeys,
     });
-    setPairs(parseFieldMappings(m.fieldMappingsJson));
+    setPairs(parseFieldMappings(m.fieldMappingsJson || '[]'));
     setSrcCols([]);
     setTgtCols([]);
-    if (m.inputType !== 'TABLE') return;
-    try {
-      const [ss, ts, st, tt] = await Promise.all([
-        listSchemas(srcDs), listSchemas(tgtDs),
-        listTables(srcDs, m.sourceSchema), listTables(tgtDs, m.targetSchema),
-      ]);
-      setSrcSchemas(ss); setTgtSchemas(ts); setSrcTables(st); setTgtTables(tt);
-      const srcRows = await listColumns(srcDs, m.sourceTable!, m.sourceSchema);
-      const cols = srcRows.map((r) => ({ name: r.name, type: platformType(r.type) }));
-      setSrcCols(cols);
-      if (m.targetTableMode === 'EXISTING') {
-        const tgtRows = await listColumns(tgtDs, m.targetTable, m.targetSchema);
-        setTgtCols(tgtRows.map((r) => ({ name: r.name, type: platformType(r.type) })));
-      } else {
-        setTgtCols(cols.map((c) => ({ ...c })));
+    if (m.targetTableMode === 'CREATE' && m.createTableDdl) {
+      await applyParsedDdl(m.createTableDdl, false);
+    }
+    if (m.inputType === 'TABLE') {
+      try {
+        const [ss, ts, st] = await Promise.all([
+          listSchemas(srcDs), listSchemas(tgtDs),
+          listTables(srcDs, m.sourceSchema),
+        ]);
+        setSrcSchemas(ss); setTgtSchemas(ts); setSrcTables(st);
+        const srcRows = await listColumns(srcDs, m.sourceTable!, m.sourceSchema);
+        setSrcCols(srcRows.map((r) => ({ name: r.name, type: platformType(r.type) })));
+        if (m.targetTableMode === 'EXISTING') {
+          const tgtRows = await listColumns(tgtDs, m.targetTable!, m.targetSchema);
+          setTgtCols(tgtRows.map((r) => ({ name: r.name, type: platformType(r.type) })));
+        }
+      } catch {
+        Message.error('映射配置回填失败');
       }
-    } catch {
-      Message.error('映射配置回填失败');
     }
   }
 
@@ -173,14 +173,36 @@ export default function EtlEditPage() {
   function onTargetModeChange(mode: string) {
     setMapTargetMode(mode);
     setPairs([]);
+    setParsedDdl(null);
     const targetTable = mappingForm.getFieldValue('targetTable');
     const targetSchema = mappingForm.getFieldValue('targetSchema');
     if (mode === 'CREATE') {
-      setTgtCols(srcCols.map((c) => ({ ...c })));
+      // 预填一份基于源字段的建表语句，用户可以直接修改后解析。
+      if (!mappingForm.getFieldValue('createTableDdl') && srcCols.length > 0) {
+        const srcTable = mappingForm.getFieldValue('sourceTable') || 'target_table';
+        const cols = srcCols.map((c) => `  ${c.name} ${c.type.toUpperCase()}`).join(',\n');
+        mappingForm.setFieldValue('createTableDdl', `CREATE TABLE ${srcTable}_backup (\n${cols}\n)`);
+      }
+      setTgtCols([]);
     } else if (targetTable) {
       loadColumns(form.getFieldValue('targetDatasourceId'), targetSchema, targetTable, 'tgt');
     } else {
       setTgtCols([]);
+    }
+  }
+
+  async function applyParsedDdl(ddl: string, notify: boolean) {
+    try {
+      const parsed = await parseEtlDdl(ddl);
+      setParsedDdl(parsed);
+      setTgtCols(parsed.columns.map((c) => ({ name: c.name, type: c.platformType })));
+      if (notify) Message.success(`已解析目标表 ${parsed.schema ? `${parsed.schema}.` : ''}${parsed.table}，共 ${parsed.columns.length} 个字段`);
+      return true;
+    } catch (e: any) {
+      setParsedDdl(null);
+      setTgtCols([]);
+      Message.error(e.response?.data?.message || '建表语句解析失败');
+      return false;
     }
   }
 
@@ -193,14 +215,13 @@ export default function EtlEditPage() {
       const result = await runSql(form.getFieldValue('sourceDatasourceId'), probeSql);
       const cols = (result.columns || []).map((name) => ({ name, type: 'text' }));
       setSrcCols(cols);
-      if (mapTargetMode === 'CREATE') setTgtCols(cols.map((c) => ({ ...c })));
       Message.success(`已解析 ${cols.length} 个字段`);
     } catch (e: any) {
       Message.error(e.response?.data?.message || '字段解析失败');
     }
   }
 
-  async function saveTask(): Promise<boolean> {
+  async function saveTask(extra?: Record<string, unknown>): Promise<boolean> {
     try {
       const values = await form.validate();
       setSaving(true);
@@ -209,6 +230,7 @@ export default function EtlEditPage() {
         onceAt: values.onceAt ? String(values.onceAt).replace(' ', 'T') : undefined,
         maxRetries: Number(values.maxRetries || 0),
         retryIntervalSeconds: Number(values.retryIntervalSeconds || 60),
+        ...extra,
       };
       if (taskId) {
         const updated = await updateEtlTask(taskId, payload);
@@ -234,8 +256,8 @@ export default function EtlEditPage() {
       const values = form.getFieldsValue();
       loadSchemas(values.sourceDatasourceId, 'src');
       loadSchemas(values.targetDatasourceId, 'tgt');
-      if (mappings.length > 0) {
-        await restoreMapping(mappings[0]);
+      if (task?.hasMapping) {
+        await restoreMapping(task);
       } else {
         mappingForm.resetFields();
         setPairs([]); setSrcCols([]); setTgtCols([]);
@@ -243,53 +265,52 @@ export default function EtlEditPage() {
       }
       setStep(2);
     } else if (step === 2) {
-      if (!(await saveMappingStep())) return;
       setStep(3);
     }
   }
 
-  async function saveMappingStep(): Promise<boolean> {
-    if (!taskId) return false;
+  async function collectMapping(): Promise<Record<string, unknown> | null> {
+    if (!taskId) return null;
     try {
-      const values = await mappingForm.validate();
-      if (pairs.length === 0) { Message.error('请至少连线一个字段映射'); return false; }
-      setSaving(true);
-      const payload = {
-        sortOrder: 0,
-        inputType: values.inputType,
-        sourceSchema: values.sourceSchema,
-        sourceTable: values.sourceTable,
-        selectSql: values.selectSql,
-        parametersJson: '{}',
-        targetSchema: values.targetSchema,
-        targetTable: values.targetTable,
-        targetTableMode: values.targetTableMode,
-        writeMode: values.writeMode,
-        fieldMappingsJson: JSON.stringify(srcCols
-          .filter((c) => pairs.some((p) => p.source === c.name))
-          .map((c) => {
-            const pair = pairs.find((p) => p.source === c.name)!;
-            return { source: c.name, target: pair.target, type: c.type, enabled: true };
-          })),
-        upsertKeysJson: values.writeMode === 'UPSERT' ? JSON.stringify(values.upsertKeys || []) : '[]',
-      };
-      const existing = mappings[0];
-      if (existing) await updateEtlMapping(existing.id, payload);
-      else await createEtlMapping(taskId, payload);
-      for (const extra of mappings.slice(1)) await deleteEtlMapping(extra.id);
-      setMappings(await listEtlMappings(taskId));
-      Message.success('映射配置已保存');
-      return true;
-    } catch (e: any) {
-      if (!e?.errors) Message.error(e.response?.data?.message || '映射保存失败');
-      return false;
-    } finally {
-      setSaving(false);
+      await mappingForm.validate();
+    } catch {
+      return null;
     }
+    const values = mappingForm.getFieldsValue();
+    if (pairs.length === 0) { Message.error('请至少连线一个字段映射'); return null; }
+    if (values.inputType === 'TABLE' && !values.sourceTable) { Message.error('请选择源表'); return null; }
+    if (values.targetTableMode === 'CREATE') {
+      if (!values.createTableDdl?.trim()) { Message.error('请输入建表语句'); return null; }
+      if (!parsedDdl) { Message.error('请先点击“解析建表语句”生成目标字段'); return null; }
+    }
+    if (values.targetTableMode === 'EXISTING' && !values.targetTable) { Message.error('请选择目标表'); return null; }
+    if (values.writeMode === 'UPSERT' && !(values.upsertKeys || []).length) { Message.error('请选择更新插入键字段'); return null; }
+    return {
+      inputType: values.inputType,
+      sourceSchema: values.sourceSchema,
+      sourceTable: values.sourceTable,
+      selectSql: values.selectSql,
+      parametersJson: '{}',
+      targetSchema: values.targetSchema,
+      targetTable: values.targetTable,
+      targetTableMode: values.targetTableMode,
+      writeMode: values.writeMode,
+      fieldMappingsJson: JSON.stringify(srcCols
+        .filter((c) => pairs.some((p) => p.source === c.name))
+        .map((c) => {
+          const pair = pairs.find((p) => p.source === c.name)!;
+          return { source: c.name, target: pair.target, type: c.type, enabled: true };
+        })),
+      upsertKeysJson: values.writeMode === 'UPSERT' ? JSON.stringify(values.upsertKeys || []) : '[]',
+      createTableDdl: values.targetTableMode === 'CREATE' ? values.createTableDdl : undefined,
+    };
   }
 
   async function finish() {
-    if (!(await saveTask())) return;
+    const mapping = await collectMapping();
+    if (!mapping) return;
+    if (!(await saveTask(mapping))) return;
+    setTask((prev) => (prev ? ({ ...prev, ...mapping, hasMapping: true } as EtlTask) : prev));
     nav(`/etl/${taskId}`);
   }
 
@@ -403,23 +424,53 @@ export default function EtlEditPage() {
                       {srcSchemas.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
                     </Select>
                   </Form.Item>
-                  <Form.Item field="sourceTable" label="源表" rules={[{ required: true, message: '请选择源表' }]}>
-                    <Select showSearch placeholder="选择源表" onChange={onSourceTableChange}>
-                      {srcTables.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
-                    </Select>
-                  </Form.Item>
-                  <Form.Item field="targetSchema" label="目标 Schema">
-                    <Select showSearch allowClear placeholder="选择 schema" onChange={onTargetSchemaChange}>
-                      {tgtSchemas.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
-                    </Select>
-                  </Form.Item>
-                  <Form.Item field="targetTable" label="目标表" rules={[{ required: true, message: '请选择或输入目标表' }]}>
-                    <Select showSearch allowCreate placeholder="选择或输入目标表名" onChange={onTargetTableChange}>
-                      {tgtTables.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
-                    </Select>
-                  </Form.Item>
-                </div>
-              ) : (
+                    <Form.Item field="sourceTable" label="源表" rules={[{ required: true, message: '请选择源表' }]}>
+                      <Select showSearch placeholder="选择源表" onChange={onSourceTableChange}>
+                        {srcTables.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
+                      </Select>
+                    </Form.Item>
+                    {mapTargetMode === 'EXISTING' && (
+                      <>
+                        <Form.Item field="targetSchema" label="目标 Schema">
+                          <Select showSearch allowClear placeholder="选择 schema" onChange={onTargetSchemaChange}>
+                            {tgtSchemas.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
+                          </Select>
+                        </Form.Item>
+                        <Form.Item field="targetTable" label="目标表" rules={[{ required: true, message: '请选择或输入目标表' }]}>
+                          <Select showSearch allowCreate placeholder="选择或输入目标表名" onChange={onTargetTableChange}>
+                            {tgtTables.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
+                          </Select>
+                        </Form.Item>
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              {mapInputType === 'TABLE' && mapTargetMode === 'CREATE' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start' }}>
+                    <Form.Item field="createTableDdl" label="建表语句" rules={[{ required: true, message: '请输入建表语句' }]}>
+                      <Input.TextArea
+                        autoSize={{ minRows: 4, maxRows: 10 }}
+                        style={{ fontFamily: 'monospace', fontSize: 12 }}
+                        placeholder={'CREATE TABLE orders_backup (\n  id BIGINT,\n  city TEXT,\n  amount NUMERIC\n)'}
+                      />
+                    </Form.Item>
+                    <Button style={{ marginTop: 4 }} onClick={() => {
+                      const ddl = mappingForm.getFieldValue('createTableDdl');
+                      if (!ddl?.trim()) { Message.warning('请先输入建表语句'); return; }
+                      applyParsedDdl(ddl, true);
+                    }}>解析建表语句</Button>
+                  </div>
+                  {parsedDdl && (
+                    <Space size={8} style={{ marginBottom: 12 }}>
+                      <Typography.Text type="secondary">目标表</Typography.Text>
+                      <Tag color="blue">{parsedDdl.schema ? `${parsedDdl.schema}.${parsedDdl.table}` : parsedDdl.table}</Tag>
+                      <Typography.Text type="secondary">{parsedDdl.columns.length} 个字段</Typography.Text>
+                    </Space>
+                  )}
+                </>
+              )}
+              {mapInputType !== 'TABLE' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start' }}>
                   <Form.Item field="selectSql" label="只读 SELECT">
                     <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder="SELECT id, name FROM orders WHERE city = :city" />

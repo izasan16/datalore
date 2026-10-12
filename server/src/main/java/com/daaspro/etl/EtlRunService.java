@@ -5,7 +5,6 @@ import com.daaspro.common.exception.BizException;
 import com.daaspro.common.security.AesGcmCipher;
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.service.DataSourceService;
-import com.daaspro.etl.entity.EtlMappingEntity;
 import com.daaspro.etl.entity.EtlRunEntity;
 import com.daaspro.etl.entity.EtlTaskEntity;
 import com.daaspro.etl.mapper.EtlRunMapper;
@@ -19,7 +18,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,15 +53,14 @@ public class EtlRunService {
         long active = runMapper.selectCount(new LambdaQueryWrapper<EtlRunEntity>().eq(EtlRunEntity::getTenantId, tenant)
                 .eq(EtlRunEntity::getTaskId, taskId).in(EtlRunEntity::getStatus, List.of("QUEUED", "RUNNING")));
         if (active > 0) throw new BizException(400, "该任务已有排队或运行中的实例");
-        List<EtlMappingEntity> mappings = etlService.listMappings(taskId);
-        if (mappings.isEmpty()) throw new BizException(400, "至少配置一组表映射后才能运行");
+        if (task.getTargetTable() == null) throw new BizException(400, "请先完成映射配置后再运行");
         EtlRunEntity run = new EtlRunEntity(); run.setTenantId(tenant); run.setTaskId(taskId); run.setTriggerType("MANUAL");
         run.setStatus("QUEUED"); run.setCurrentAttempt(1); run.setReadRows(0L); run.setWrittenRows(0L); run.setMappingStatsJson("{}");
         run.setParametersJson(toJson(parameters == null ? Map.of() : parameters)); run.setConfigVersion(task.getConfigVersion()); run.setCreatedAt(LocalDateTime.now());
         runMapper.insert(run);
         try {
             String workerId = "run-" + run.getId() + "-" + UUID.randomUUID();
-            Map<String, Object> job = new LinkedHashMap<>(); job.put("workerRunId", workerId); job.put("mappings", buildMappings(task, mappings));
+            Map<String, Object> job = new LinkedHashMap<>(); job.put("workerRunId", workerId); job.put("mappings", List.of(buildMapping(task)));
             Map<?, ?> response = worker.post().uri("/internal/runs").contentType(MediaType.APPLICATION_JSON)
                     .body(objectMapper.writeValueAsString(job)).retrieve().body(Map.class);
             run.setWorkerRunId(String.valueOf(response.get("workerRunId"))); run.setStatus("RUNNING"); run.setStartedAt(LocalDateTime.now()); runMapper.updateById(run);
@@ -104,20 +101,27 @@ public class EtlRunService {
         return run(old.getTaskId(), null);
     }
 
-    private List<Map<String, Object>> buildMappings(EtlTaskEntity task, List<EtlMappingEntity> mappings) {
-        DataSourceEntity source = dataSourceService.getOwned(task.getSourceDatasourceId()); DataSourceEntity target = dataSourceService.getOwned(task.getTargetDatasourceId());
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (EtlMappingEntity m : mappings) {
-            Map<String, Object> job = new LinkedHashMap<>(); job.put("source", connection(source)); job.put("target", connection(target)); job.put("fields", readList(m.getFieldMappingsJson()));
-            job.put("writeMode", m.getWriteMode()); job.put("targetMode", m.getTargetTableMode()); job.put("upsertKeys", readStrings(m.getUpsertKeysJson()));
-            job.put("select", m.getSelectSql()); job.put("parameters", readMap(m.getParametersJson())); job.put("sourceTable", m.getSourceTable());
-            Map<String, Object> sourceConfig = (Map<String, Object>) job.get("source");
-            sourceConfig.put("schema", m.getSourceSchema() == null || m.getSourceSchema().isBlank() ? source.getSchemaName() : m.getSourceSchema());
-            sourceConfig.put("table", m.getSourceTable());
-            Map<String, Object> targetConfig = (Map<String, Object>) job.get("target");
-            targetConfig.put("schema", m.getTargetSchema() == null || m.getTargetSchema().isBlank() ? target.getSchemaName() : m.getTargetSchema());
-            targetConfig.put("table", m.getTargetTable()); result.add(job);
-        } return result;
+    private Map<String, Object> buildMapping(EtlTaskEntity task) {
+        DataSourceEntity source = dataSourceService.getOwned(task.getSourceDatasourceId());
+        DataSourceEntity target = dataSourceService.getOwned(task.getTargetDatasourceId());
+        Map<String, Object> job = new LinkedHashMap<>();
+        job.put("source", connection(source));
+        job.put("target", connection(target));
+        job.put("fields", readList(task.getFieldMappingsJson()));
+        job.put("writeMode", task.getWriteMode());
+        job.put("targetMode", task.getTargetTableMode());
+        job.put("upsertKeys", readStrings(task.getUpsertKeysJson()));
+        job.put("select", task.getSelectSql());
+        job.put("parameters", readMap(task.getParametersJson()));
+        job.put("sourceTable", task.getSourceTable());
+        job.put("createDdl", task.getCreateTableDdl());
+        Map<String, Object> sourceConfig = (Map<String, Object>) job.get("source");
+        sourceConfig.put("schema", task.getSourceSchema() == null || task.getSourceSchema().isBlank() ? source.getSchemaName() : task.getSourceSchema());
+        sourceConfig.put("table", task.getSourceTable());
+        Map<String, Object> targetConfig = (Map<String, Object>) job.get("target");
+        targetConfig.put("schema", task.getTargetSchema() == null || task.getTargetSchema().isBlank() ? target.getSchemaName() : task.getTargetSchema());
+        targetConfig.put("table", task.getTargetTable());
+        return job;
     }
     private Map<String, Object> connection(DataSourceEntity ds) {
         Map<String, Object> m = new LinkedHashMap<>();

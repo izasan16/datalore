@@ -1,6 +1,5 @@
 package com.daaspro.etl;
 
-import com.daaspro.etl.entity.EtlMappingEntity;
 import com.daaspro.etl.entity.EtlTaskEntity;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -18,10 +17,10 @@ public class EtlController {
 
     public record TaskBody(@NotBlank String name, String description, Long sourceDatasourceId, Long targetDatasourceId,
                            String scheduleType, java.time.LocalDateTime onceAt, String cronExpression,
-                           java.time.LocalDateTime scheduleEndAt, Integer maxRetries, Integer retryIntervalSeconds) {}
-    public record MappingBody(Integer sortOrder, String inputType, String sourceSchema, String sourceTable,
-                              String selectSql, String parametersJson, String targetSchema, String targetTable,
-                              String targetTableMode, String writeMode, String fieldMappingsJson, String upsertKeysJson) {}
+                           java.time.LocalDateTime scheduleEndAt, Integer maxRetries, Integer retryIntervalSeconds,
+                           String inputType, String sourceSchema, String sourceTable, String selectSql,
+                           String parametersJson, String targetSchema, String targetTable, String targetTableMode,
+                           String writeMode, String fieldMappingsJson, String upsertKeysJson, String createTableDdl) {}
 
     @GetMapping
     public List<Map<String, Object>> list() { return service.listTasks(); }
@@ -54,22 +53,16 @@ public class EtlController {
         return Map.of("status", service.setStatus(id, body.get("status")).getStatus());
     }
 
-    @GetMapping("/{id}/mappings")
-    public List<EtlMappingEntity> mappings(@PathVariable Long id) { return service.listMappings(id); }
-
-    @PostMapping("/{id}/mappings")
-    public Map<String, Object> createMapping(@PathVariable Long id, @RequestBody MappingBody body) {
-        return Map.of("id", service.createMapping(id, mappingReq(body)).getId());
+    @PostMapping("/ddl/parse")
+    public Map<String, Object> parseDdl(@RequestBody Map<String, String> body) {
+        return service.parseDdl(body.get("ddl"));
     }
 
-    @PutMapping("/mappings/{mappingId}")
-    public Map<String, Object> updateMapping(@PathVariable Long mappingId, @RequestBody MappingBody body) {
-        return Map.of("id", service.updateMapping(mappingId, mappingReq(body)).getId());
+    private EtlService.TaskReq taskReq(TaskBody b) {
+        return new EtlService.TaskReq(b.name(), b.description(), b.sourceDatasourceId(), b.targetDatasourceId(),
+                b.scheduleType(), b.onceAt(), b.cronExpression(), b.scheduleEndAt(), b.maxRetries(),
+                b.retryIntervalSeconds(), b.inputType(), b.sourceSchema(), b.sourceTable(), b.selectSql(),
+                b.parametersJson(), b.targetSchema(), b.targetTable(), b.targetTableMode(), b.writeMode(),
+                b.fieldMappingsJson(), b.upsertKeysJson(), b.createTableDdl());
     }
-
-    @DeleteMapping("/mappings/{mappingId}")
-    public Map<String, Object> deleteMapping(@PathVariable Long mappingId) { service.deleteMapping(mappingId); return Map.of("ok", true); }
-
-    private EtlService.TaskReq taskReq(TaskBody b) { return new EtlService.TaskReq(b.name(), b.description(), b.sourceDatasourceId(), b.targetDatasourceId(), b.scheduleType(), b.onceAt(), b.cronExpression(), b.scheduleEndAt(), b.maxRetries(), b.retryIntervalSeconds()); }
-    private EtlService.MappingReq mappingReq(MappingBody b) { return new EtlService.MappingReq(b.sortOrder(), b.inputType(), b.sourceSchema(), b.sourceTable(), b.selectSql(), b.parametersJson(), b.targetSchema(), b.targetTable(), b.targetTableMode(), b.writeMode(), b.fieldMappingsJson(), b.upsertKeysJson()); }
 }
