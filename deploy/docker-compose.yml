@@ -37,6 +37,16 @@ services:
     volumes:
       - miniodata:/data
 
+  etl-worker:
+    build: ./etl-worker
+    container_name: daaspro-etl-worker
+    environment:
+      DAASPRO_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN:-dev-worker-token}
+      DAASPRO_WORKER_PORT: 8090
+    ports:
+      - "18090:8090"
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:

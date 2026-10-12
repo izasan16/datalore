@@ -6,6 +6,7 @@ import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Configuration
 public class MinioConfig {
@@ -18,6 +19,7 @@ public class MinioConfig {
     }
 
     @Bean(initMethod = "ensureBucket")
+    @ConditionalOnProperty(name = "daaspro.minio.init-bucket", havingValue = "true", matchIfMissing = true)
     public BucketInitializer bucketInitializer(MinioClient client,
                                                @Value("${daaspro.minio.bucket}") String bucket) {
         return new BucketInitializer(client, bucket);

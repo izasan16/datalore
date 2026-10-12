@@ -29,9 +29,13 @@ daaspro:
     access-key: daaspro
     secret-key: daaspro_dev_2026
     bucket: daaspro-staging
+    init-bucket: ${DAASPRO_MINIO_INIT_BUCKET:true}
   sql:
     max-rows: 10000      # SQL 网关单次结果行数上限
     max-seconds: 30      # SQL 网关语句超时（秒）
+  etl:
+    worker-url: ${DAASPRO_ETL_WORKER_URL:http://localhost:8090}
+    worker-token: ${DAASPRO_ETL_WORKER_TOKEN:dev-worker-token}
 
 sa-token:
   token-name: Authorization

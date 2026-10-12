@@ -7,6 +7,7 @@ import {
   IconCloud,
   IconCodeBlock,
   IconHome,
+  IconSync,
 } from '@arco-design/web-react/icon';
 import { me, logout } from '../../api/auth';
 import { LogoMark } from '../../components/Brand';
@@ -26,6 +27,7 @@ const MENU = [
   { key: 'datamanage', title: '数据管理', icon: <IconCloud /> },
   { key: 'sqllab', title: 'SQL 分析', icon: <IconCode /> },
   { key: 'apipub', title: 'API 发布', icon: <IconCodeBlock /> },
+  { key: 'etl', title: '数据集成', icon: <IconSync /> },
 ];
 
 export default function WorkspaceLayout() {

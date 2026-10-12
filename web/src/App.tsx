@@ -13,6 +13,10 @@ import ApiPubPage from './pages/apipub';
 import ApiPubNewPage from './pages/apipub/new';
 import ApiPubDetailPage from './pages/apipub/detail';
 import ApiAppsPage from './pages/apipub/apps';
+import EtlPage from './pages/etl';
+import EtlEditPage from './pages/etl/edit';
+import EtlDetailPage from './pages/etl/detail';
+import EtlRunDetailPage from './pages/etl/run-detail';
 
 function NotFound() {
   const nav = useNavigate();
@@ -47,6 +51,11 @@ export default function App() {
         <Route path="/apipub/new" element={<ApiPubNewPage />} />
         <Route path="/apipub/apps" element={<ApiAppsPage />} />
         <Route path="/apipub/:id" element={<ApiPubDetailPage />} />
+        <Route path="/etl" element={<EtlPage />} />
+        <Route path="/etl/new" element={<EtlEditPage />} />
+        <Route path="/etl/:id/edit" element={<EtlEditPage />} />
+        <Route path="/etl/:id/runs/:runId" element={<EtlRunDetailPage />} />
+        <Route path="/etl/:id" element={<EtlDetailPage />} />
       </Route>
       {/* 旧路径兼容 */}
       <Route path="/dataset" element={<Navigate to="/datamanage" replace />} />
