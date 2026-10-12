@@ -36,10 +36,14 @@ export function deleteDatasource(id: number) {
   return http.delete(`/datasources/${id}`).then((r) => r.data);
 }
 
-export function listTables(id: number) {
-  return http.get<{ name: string }[]>(`/datasources/${id}/tables`).then((r) => r.data);
+export function listSchemas(id: number) {
+  return http.get<{ name: string }[]>(`/datasources/${id}/schemas`).then((r) => r.data);
 }
 
-export function listColumns(id: number, table: string) {
-  return http.get<ColumnInfo[]>(`/datasources/${id}/tables/${table}/columns`).then((r) => r.data);
+export function listTables(id: number, schema?: string) {
+  return http.get<{ name: string }[]>(`/datasources/${id}/tables`, { params: schema ? { schema } : undefined }).then((r) => r.data);
+}
+
+export function listColumns(id: number, table: string, schema?: string) {
+  return http.get<ColumnInfo[]>(`/datasources/${id}/tables/${table}/columns`, { params: schema ? { schema } : undefined }).then((r) => r.data);
 }

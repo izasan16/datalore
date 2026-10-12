@@ -60,13 +60,20 @@ public class DataSourceController {
     }
 
     @GetMapping("/{id}/tables")
-    public List<Map<String, String>> tables(@PathVariable Long id) {
-        return service.listTables(id);
+    public List<Map<String, String>> tables(@PathVariable Long id,
+                                            @RequestParam(required = false) String schema) {
+        return service.listTables(id, schema);
     }
 
     @GetMapping("/{id}/tables/{table}/columns")
-    public List<Map<String, String>> columns(@PathVariable Long id, @PathVariable String table) {
-        return service.listColumns(id, table);
+    public List<Map<String, String>> columns(@PathVariable Long id, @PathVariable String table,
+                                             @RequestParam(required = false) String schema) {
+        return service.listColumns(id, table, schema);
+    }
+
+    @GetMapping("/{id}/schemas")
+    public List<Map<String, String>> schemas(@PathVariable Long id) {
+        return service.listSchemas(id);
     }
 
     @DeleteMapping("/{id}")

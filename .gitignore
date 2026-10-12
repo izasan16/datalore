@@ -13,3 +13,9 @@ tmp-server.log
 tmp-server-err.log
 tmp-vite.log
 .worktrees/
+.playwright-cli/
+.superpowers/
+.tmp-pgdata-etl/
+deploy/etl-worker/__pycache__/
+gui-test-screenshots/
+tmp-pg*.log

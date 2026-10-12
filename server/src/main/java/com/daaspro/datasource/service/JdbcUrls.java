@@ -22,6 +22,11 @@ public enum JdbcUrls {
             return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
                     + esc(schema) + "' AND table_name = '" + esc(table) + "' ORDER BY ordinal_position";
         }
+        @Override
+        public String listSchemasSql() {
+            return "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN "
+                    + "('pg_catalog', 'information_schema') AND schema_name NOT LIKE 'pg\\_%' ORDER BY 1";
+        }
     },
     MYSQL {
         @Override
@@ -33,12 +38,19 @@ public enum JdbcUrls {
         public int defaultPort() { return 3306; }
         @Override
         public String listTablesSql(String schema) {
-            return "SELECT table_name FROM information_schema.tables WHERE table_schema = database() AND table_type = 'BASE TABLE' ORDER BY 1";
+            return "SELECT table_name FROM information_schema.tables WHERE table_schema = '"
+                    + esc(schema) + "' AND table_type = 'BASE TABLE' ORDER BY 1";
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = database() AND table_name = '"
+            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
+                    + esc(schema) + "' AND table_name = '"
                     + esc(table) + "' ORDER BY ordinal_position";
+        }
+        @Override
+        public String listSchemasSql() {
+            return "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN "
+                    + "('mysql', 'sys', 'performance_schema', 'information_schema') ORDER BY 1";
         }
     },
     SQLSERVER {
@@ -50,12 +62,21 @@ public enum JdbcUrls {
         public int defaultPort() { return 1433; }
         @Override
         public String listTablesSql(String schema) {
-            return "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' ORDER BY 1";
+            return "SELECT table_name FROM information_schema.tables WHERE table_schema = '"
+                    + esc(schema) + "' AND table_type = 'BASE TABLE' ORDER BY 1";
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '"
+            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
+                    + esc(schema) + "' AND table_name = '"
                     + esc(table) + "' ORDER BY ordinal_position";
+        }
+        @Override
+        public String listSchemasSql() {
+            return "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN "
+                    + "('guest', 'INFORMATION_SCHEMA', 'sys', 'db_owner', 'db_accessadmin', 'db_securityadmin', "
+                    + "'db_ddladmin', 'db_backupoperator', 'db_datareader', 'db_datawriter', 'db_denydatareader', "
+                    + "'db_denydatawriter') ORDER BY 1";
         }
     },
     ORACLE {
@@ -67,12 +88,18 @@ public enum JdbcUrls {
         public int defaultPort() { return 1521; }
         @Override
         public String listTablesSql(String schema) {
-            return "SELECT table_name FROM user_tables ORDER BY 1";
+            return "SELECT table_name FROM all_tables WHERE owner = '" + esc(schema) + "' ORDER BY 1";
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM user_tab_columns WHERE table_name = '"
-                    + esc(table) + "' ORDER BY column_id";
+            return "SELECT column_name, data_type FROM all_tab_columns WHERE owner = '" + esc(schema)
+                    + "' AND table_name = '" + esc(table) + "' ORDER BY column_id";
+        }
+        @Override
+        public String listSchemasSql() {
+            return "SELECT DISTINCT owner FROM all_tables WHERE owner NOT IN ('SYS', 'SYSTEM', 'XDB', 'MDSYS', "
+                    + "'CTXSYS', 'ORDSYS', 'OUTLN', 'DBSNMP', 'APPQOSSYS', 'OLAPSYS', 'ORDDATA', 'LBACSYS', "
+                    + "'DVSYS', 'AUDSYS', 'GSMADMIN_INTERNAL') ORDER BY 1";
         }
     };
 
@@ -80,6 +107,7 @@ public enum JdbcUrls {
     public abstract int defaultPort();
     public abstract String listTablesSql(String schema);
     public abstract String listColumnsSql(String schema, String table);
+    public abstract String listSchemasSql();
 
     public static JdbcUrls of(String type) {
         return switch (type) {

@@ -96,14 +96,30 @@ public class DataSourceService {
         }
     }
 
-    public List<Map<String, String>> listTables(Long id) {
+    public List<Map<String, String>> listSchemas(Long id) {
         DataSourceEntity ds = getOwned(id);
         boolean builtin = Boolean.TRUE.equals(ds.getBuiltin());
+        String sql = builtin ? JdbcUrls.POSTGRESQL.listSchemasSql() : JdbcUrls.of(ds.getType()).listSchemasSql();
+        try (var conn = open(ds); var st = conn.prepareStatement(sql); var rs = st.executeQuery()) {
+            var rows = new ArrayList<Map<String, String>>();
+            while (rs.next()) rows.add(Map.of("name", rs.getString(1)));
+            return rows;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "浏览 schema 失败: " + rootMessage(e));
+        }
+    }
+
+    public List<Map<String, String>> listTables(Long id, String schemaParam) {
+        DataSourceEntity ds = getOwned(id);
+        boolean builtin = Boolean.TRUE.equals(ds.getBuiltin());
+        String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
         String sql = builtin
                 ? "SELECT tablename FROM pg_tables WHERE schemaname = ? ORDER BY 1"
-                : JdbcUrls.of(ds.getType()).listTablesSql(ds.getSchemaName() == null ? "public" : ds.getSchemaName());
+                : JdbcUrls.of(ds.getType()).listTablesSql(schema);
         try (var conn = open(ds); var st = conn.prepareStatement(sql)) {
-            if (builtin) st.setString(1, ds.getSchemaName());
+            if (builtin) st.setString(1, schema);
             try (var rs = st.executeQuery()) {
                 var rows = new ArrayList<Map<String, String>>();
                 while (rs.next()) rows.add(Map.of("name", rs.getString(1)));
@@ -116,10 +132,9 @@ public class DataSourceService {
         }
     }
 
-    public List<Map<String, String>> listColumns(Long id, String table) {
+    public List<Map<String, String>> listColumns(Long id, String table, String schemaParam) {
         DataSourceEntity ds = getOwned(id);
-        String schema = Boolean.TRUE.equals(ds.getBuiltin()) ? ds.getSchemaName()
-                : (ds.getSchemaName() == null ? "public" : ds.getSchemaName());
+        String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
         String sql = JdbcUrls.of(ds.getType()).listColumnsSql(schema, table);
         try (var conn = open(ds); var st = conn.prepareStatement(sql); var rs = st.executeQuery()) {
             var rows = new ArrayList<Map<String, String>>();
@@ -137,6 +152,18 @@ public class DataSourceService {
             return connectionManager.builtinPool(ds.getId(), ds.getSchemaName()).getConnection();
         }
         return connectionManager.pool(ds, cipher.decrypt(ds.getPasswordEnc())).getConnection();
+    }
+
+    private String defaultSchema(DataSourceEntity ds) {
+        if (Boolean.TRUE.equals(ds.getBuiltin()) || "postgresql".equals(ds.getType())) {
+            return ds.getSchemaName() == null ? "public" : ds.getSchemaName();
+        }
+        return switch (ds.getType()) {
+            case "mysql" -> ds.getDatabaseName() == null ? "" : ds.getDatabaseName();
+            case "sqlserver" -> "dbo";
+            case "oracle" -> ds.getUsername() == null ? "" : ds.getUsername().toUpperCase();
+            default -> ds.getSchemaName() == null ? "public" : ds.getSchemaName();
+        };
     }
 
     public static String rootMessage(Exception e) {

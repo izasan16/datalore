@@ -27,7 +27,7 @@ class CatalogTest {
         assertThat(list).anyMatch(d -> Boolean.TRUE.equals(d.getBuiltin()));
         var builtin = list.stream().filter(d -> Boolean.TRUE.equals(d.getBuiltin())).findFirst().orElseThrow();
 
-        var tables = dataSourceService.listTables(builtin.getId());
+        var tables = dataSourceService.listTables(builtin.getId(), null);
         assertThat(tables).isEmpty();
 
         TenantContext.clear();
