@@ -115,7 +115,7 @@ export default function FieldMappingPanel({ sourceCols, targetCols, value, onCha
       <div key={c.name} data-target-row={side === 'target' ? c.name : undefined} style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px',
         borderBottom: '1px solid var(--color-border-2)', fontSize: 12,
-        flexDirection: side === 'source' ? 'row' : 'row-reverse',
+        flexDirection: 'row',
         background: dropHover ? 'rgba(22, 93, 255, 0.08)' : undefined,
         cursor: side === 'target' && drag ? 'pointer' : undefined,
         opacity: dimmed ? 0.45 : 1,
@@ -123,7 +123,7 @@ export default function FieldMappingPanel({ sourceCols, targetCols, value, onCha
         {side === 'source' ? (
           <><span style={{ fontWeight: 500 }}>{c.name}</span><span style={{ color: 'var(--color-text-3)' }}>{c.type}</span><span style={{ flex: 1 }} />{dot}</>
         ) : (
-          <>{dot}<span style={{ flex: 1 }} /><span style={{ color: 'var(--color-text-3)' }}>{c.type}</span><span style={{ fontWeight: 500 }}>{c.name}</span></>
+          <>{dot}<span style={{ fontWeight: 500 }}>{c.name}</span><span style={{ color: 'var(--color-text-3)' }}>{c.type}</span><span style={{ flex: 1 }} /></>
         )}
       </div>
     );
