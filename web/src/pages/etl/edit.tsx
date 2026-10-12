@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Button, DatePicker, Form, Input, Message, Select, Space, Steps, Table, Typography } from '@arco-design/web-react';
+import { Button, DatePicker, Form, Input, Message, Select, Space, Steps, Typography } from '@arco-design/web-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   createEtlMapping, createEtlTask, deleteEtlMapping, EtlMapping, EtlTask,
-  getEtlTask, listEtlMappings, updateEtlTask,
+  getEtlTask, listEtlMappings, updateEtlMapping, updateEtlTask,
 } from '../../api/etl';
 import {
   ColumnInfo, DataSourceInfo, listColumns, listDatasources, listSchemas, listTables,
@@ -13,8 +13,6 @@ import FieldMappingPanel, { FieldCol, FieldPair } from './FieldMapping';
 
 const StepItem = Steps.Step;
 
-const WRITE_MODE_LABELS: Record<string, string> = { OVERWRITE: '覆盖', APPEND: '追加', UPSERT: '更新插入' };
-const TABLE_MODE_LABELS: Record<string, string> = { CREATE: '自动建表', EXISTING: '写入已有表' };
 
 function platformType(raw: string): string {
   const t = (raw || '').toLowerCase();
@@ -24,6 +22,15 @@ function platformType(raw: string): string {
   if (t.includes('int') || t.includes('serial')) return 'bigint';
   if (t.includes('numeric') || t.includes('decimal') || t.includes('number') || t.includes('double') || t.includes('float') || t.includes('real') || t.includes('money')) return 'numeric';
   return 'text';
+}
+
+function parseFieldMappings(json: string): { source: string; target: string }[] {
+  try {
+    const arr = JSON.parse(json || '[]');
+    return Array.isArray(arr) ? arr.filter((f: any) => f && f.source && f.target) : [];
+  } catch {
+    return [];
+  }
 }
 
 export default function EtlEditPage() {
@@ -53,7 +60,7 @@ export default function EtlEditPage() {
   useEffect(() => {
     listDatasources().then(setSources).catch(() => Message.error('数据源加载失败'));
     if (id) {
-      getEtlTask(Number(id)).then((loaded) => {
+      getEtlTask(Number(id)).then(async (loaded) => {
         setTask(loaded);
         form.setFieldsValue({
           name: loaded.name,
@@ -66,8 +73,10 @@ export default function EtlEditPage() {
           retryIntervalSeconds: 60,
         });
         setSchedType(loaded.scheduleType);
+        const ms = await listEtlMappings(Number(id));
+        setMappings(ms);
+        if (ms.length > 0) await restoreMapping(ms[0]);
       }).catch(() => Message.error('任务加载失败'));
-      listEtlMappings(Number(id)).then(setMappings);
     }
   }, [id]);
 
@@ -89,6 +98,49 @@ export default function EtlEditPage() {
       const cols = rows.map((r) => ({ name: r.name, type: platformType(r.type) }));
       if (side === 'src') setSrcCols(cols); else setTgtCols(cols);
     }).catch(() => Message.error('字段加载失败'));
+  }
+
+  async function restoreMapping(m: EtlMapping) {
+    const srcDs = form.getFieldValue('sourceDatasourceId');
+    const tgtDs = form.getFieldValue('targetDatasourceId');
+    setMapInputType(m.inputType);
+    setMapWriteMode(m.writeMode);
+    setMapTargetMode(m.targetTableMode);
+    let upsertKeys: string[] = [];
+    try { upsertKeys = JSON.parse(m.upsertKeysJson || '[]'); } catch { upsertKeys = []; }
+    mappingForm.setFieldsValue({
+      inputType: m.inputType,
+      writeMode: m.writeMode,
+      targetTableMode: m.targetTableMode,
+      sourceSchema: m.sourceSchema,
+      sourceTable: m.sourceTable,
+      targetSchema: m.targetSchema,
+      targetTable: m.targetTable,
+      selectSql: m.selectSql,
+      upsertKeys,
+    });
+    setPairs(parseFieldMappings(m.fieldMappingsJson));
+    setSrcCols([]);
+    setTgtCols([]);
+    if (m.inputType !== 'TABLE') return;
+    try {
+      const [ss, ts, st, tt] = await Promise.all([
+        listSchemas(srcDs), listSchemas(tgtDs),
+        listTables(srcDs, m.sourceSchema), listTables(tgtDs, m.targetSchema),
+      ]);
+      setSrcSchemas(ss); setTgtSchemas(ts); setSrcTables(st); setTgtTables(tt);
+      const srcRows = await listColumns(srcDs, m.sourceTable!, m.sourceSchema);
+      const cols = srcRows.map((r) => ({ name: r.name, type: platformType(r.type) }));
+      setSrcCols(cols);
+      if (m.targetTableMode === 'EXISTING') {
+        const tgtRows = await listColumns(tgtDs, m.targetTable, m.targetSchema);
+        setTgtCols(tgtRows.map((r) => ({ name: r.name, type: platformType(r.type) })));
+      } else {
+        setTgtCols(cols.map((c) => ({ ...c })));
+      }
+    } catch {
+      Message.error('映射配置回填失败');
+    }
   }
 
   function onSourceSchemaChange(schema: string) {
@@ -121,8 +173,15 @@ export default function EtlEditPage() {
   function onTargetModeChange(mode: string) {
     setMapTargetMode(mode);
     setPairs([]);
-    if (mode === 'CREATE') setTgtCols(srcCols.map((c) => ({ ...c })));
-    else setTgtCols([]);
+    const targetTable = mappingForm.getFieldValue('targetTable');
+    const targetSchema = mappingForm.getFieldValue('targetSchema');
+    if (mode === 'CREATE') {
+      setTgtCols(srcCols.map((c) => ({ ...c })));
+    } else if (targetTable) {
+      loadColumns(form.getFieldValue('targetDatasourceId'), targetSchema, targetTable, 'tgt');
+    } else {
+      setTgtCols([]);
+    }
   }
 
   async function resolveSelectColumns() {
@@ -175,20 +234,28 @@ export default function EtlEditPage() {
       const values = form.getFieldsValue();
       loadSchemas(values.sourceDatasourceId, 'src');
       loadSchemas(values.targetDatasourceId, 'tgt');
+      if (mappings.length > 0) {
+        await restoreMapping(mappings[0]);
+      } else {
+        mappingForm.resetFields();
+        setPairs([]); setSrcCols([]); setTgtCols([]);
+        setMapInputType('TABLE'); setMapWriteMode('APPEND'); setMapTargetMode('CREATE');
+      }
       setStep(2);
     } else if (step === 2) {
+      if (!(await saveMappingStep())) return;
       setStep(3);
     }
   }
 
-  async function saveMapping() {
-    if (!taskId) return;
+  async function saveMappingStep(): Promise<boolean> {
+    if (!taskId) return false;
     try {
       const values = await mappingForm.validate();
-      if (pairs.length === 0) { Message.error('请至少连线一个字段映射'); return; }
+      if (pairs.length === 0) { Message.error('请至少连线一个字段映射'); return false; }
       setSaving(true);
-      await createEtlMapping(taskId, {
-        sortOrder: mappings.length,
+      const payload = {
+        sortOrder: 0,
         inputType: values.inputType,
         sourceSchema: values.sourceSchema,
         sourceTable: values.sourceTable,
@@ -205,26 +272,19 @@ export default function EtlEditPage() {
             return { source: c.name, target: pair.target, type: c.type, enabled: true };
           })),
         upsertKeysJson: values.writeMode === 'UPSERT' ? JSON.stringify(values.upsertKeys || []) : '[]',
-      });
-      Message.success('映射已添加');
+      };
+      const existing = mappings[0];
+      if (existing) await updateEtlMapping(existing.id, payload);
+      else await createEtlMapping(taskId, payload);
+      for (const extra of mappings.slice(1)) await deleteEtlMapping(extra.id);
       setMappings(await listEtlMappings(taskId));
-      mappingForm.resetFields();
-      setPairs([]); setSrcCols([]); setTgtCols([]);
+      Message.success('映射配置已保存');
+      return true;
     } catch (e: any) {
       if (!e?.errors) Message.error(e.response?.data?.message || '映射保存失败');
+      return false;
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function removeMapping(mappingId: number) {
-    if (!taskId) return;
-    try {
-      await deleteEtlMapping(mappingId);
-      setMappings(await listEtlMappings(taskId));
-      Message.success('映射已删除');
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '删除失败');
     }
   }
 
@@ -249,7 +309,7 @@ export default function EtlEditPage() {
         <Steps current={step + 1} size="small" style={{ marginBottom: 28 }}>
           <StepItem title="基本信息" />
           <StepItem title="源与目标" />
-          <StepItem title="表映射" />
+          <StepItem title="映射配置" />
           <StepItem title="调度与确认" />
         </Steps>
         <Form form={form} layout="vertical" initialValues={{ scheduleType: 'MANUAL', maxRetries: 0, retryIntervalSeconds: 60 }}>
@@ -307,16 +367,7 @@ export default function EtlEditPage() {
         </Form>
         {step >= 2 && (
           <div style={{ marginTop: 24 }}>
-            <Typography.Title heading={6}>表映射</Typography.Title>
-            <Table style={{ marginTop: 12 }} size="small" pagination={false} data={mappings} rowKey="id" columns={[
-              { title: '源表', render: (_: unknown, r: EtlMapping) => (r.inputType === 'TABLE' ? `${r.sourceSchema || ''}.${r.sourceTable}` : '参数化 SELECT') },
-              { title: '目标表', render: (_: unknown, r: EtlMapping) => `${r.targetSchema || ''}.${r.targetTable}` },
-              { title: '写入策略', render: (_: unknown, r: EtlMapping) => WRITE_MODE_LABELS[r.writeMode] || r.writeMode },
-              { title: '建表方式', render: (_: unknown, r: EtlMapping) => TABLE_MODE_LABELS[r.targetTableMode] || r.targetTableMode },
-              { title: '操作', width: 80, render: (_: unknown, r: EtlMapping) => <Button size="mini" status="danger" onClick={() => removeMapping(r.id)}>删除</Button> },
-            ]} />
-            <Typography.Title heading={6} style={{ marginTop: 24 }}>添加映射</Typography.Title>
-            <Form form={mappingForm} layout="vertical" style={{ marginTop: 12 }} initialValues={{ inputType: 'TABLE', targetTableMode: 'CREATE', writeMode: 'APPEND' }}>
+            <Form form={mappingForm} layout="vertical" initialValues={{ inputType: 'TABLE', targetTableMode: 'CREATE', writeMode: 'APPEND' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 <Form.Item field="inputType" label="输入类型">
                   <Select onChange={(v) => { setMapInputType(v); setPairs([]); setSrcCols([]); setTgtCols([]); }}>
@@ -381,7 +432,6 @@ export default function EtlEditPage() {
                   <FieldMappingPanel sourceCols={srcCols} targetCols={tgtCols} value={pairs} onChange={setPairs} />
                 </div>
               )}
-              <Button type="primary" loading={saving} onClick={saveMapping} style={{ marginTop: 16 }}>添加映射</Button>
             </Form>
           </div>
         )}
