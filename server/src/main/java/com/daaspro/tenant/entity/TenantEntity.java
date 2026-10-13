@@ -14,7 +14,6 @@ public class TenantEntity {
     private Long id;
     private String name;
     private String slug;
-    private String schemaName;
     private Integer status;
     private LocalDateTime createdAt;
 }

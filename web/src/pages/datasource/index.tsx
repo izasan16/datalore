@@ -133,10 +133,9 @@ export default function DatasourcePage() {
               columns={[
                 {
                   title: '名称', dataIndex: 'name',
-                  render: (v: string, row: DataSourceInfo) => (
+                  render: (v: string) => (
                     <Space>
                       {v}
-                      {row.builtin && <Tag color="arcoblue" size="small">内置</Tag>}
                     </Space>
                   ),
                 },
@@ -144,7 +143,7 @@ export default function DatasourcePage() {
                 {
                   title: '连接', dataIndex: 'host', width: 240,
                   render: (_: string, row: DataSourceInfo) =>
-                    row.builtin ? `平台内置 · ${row.schemaName}` : `${row.host}:${row.port}/${row.databaseName}`,
+                    `${row.host}:${row.port}/${row.databaseName}`,
                 },
                 {
                   title: '操作', width: 240,
@@ -152,7 +151,7 @@ export default function DatasourcePage() {
                     <Space>
                       <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
                       <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
-                      {!row.builtin && (
+                      {(
                         <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
                       )}
                     </Space>

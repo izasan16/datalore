@@ -33,7 +33,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             response.setStatus(401);
             return false;
         }
-        TenantContext.set(new TenantContext.Ctx(tenantId, userId, username, role, tenant.getSchemaName()));
+        TenantContext.set(new TenantContext.Ctx(tenantId, userId, username, role));
         return true;
     }
 

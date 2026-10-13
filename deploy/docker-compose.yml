@@ -43,6 +43,7 @@ services:
     environment:
       DAASPRO_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN:-dev-worker-token}
       DAASPRO_WORKER_PORT: 8090
+      DAASPRO_WORKER_GATEWAY_REWRITE: "1"
     ports:
       - "18090:8090"
     restart: unless-stopped

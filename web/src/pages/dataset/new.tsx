@@ -169,13 +169,8 @@ function ImportForm({
       const list = await listDatasources();
       setDsOptions(list.map((d) => ({
         value: d.id,
-        label: d.builtin ? `${d.name}（内置，可写入）` : `${d.name}（${d.type}，MVP 只读）`,
+        label: `${d.name}（${d.type}）`,
       })));
-      const builtin = list.find((d) => d.builtin);
-      if (builtin) {
-        form.setFieldValue('datasourceId', builtin.id);
-        setWatchDs(builtin.id);
-      }
     } catch (e: any) {
       setDatasourceError(true);
       Message.error(e.response?.data?.message || '数据源加载失败');

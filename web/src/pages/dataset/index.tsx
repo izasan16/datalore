@@ -75,7 +75,7 @@ export default function DatasetPage() {
     return (
       <Space size={6}>
         {ds.name}
-        {ds.builtin ? <Tag size="small" color="arcoblue">内置</Tag> : <Tag size="small">{ds.type}</Tag>}
+        <Tag size="small">{ds.type}</Tag>
         {loadingDs === ds.id && <Spin size={12} />}
       </Space>
     );

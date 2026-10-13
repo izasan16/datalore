@@ -2,6 +2,7 @@ package com.daaspro.dataset.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.daaspro.common.exception.BizException;
+import com.daaspro.common.security.AesGcmCipher;
 import com.daaspro.dataset.entity.DatasetEntity;
 import com.daaspro.dataset.mapper.DatasetMapper;
 import com.daaspro.datasource.entity.DataSourceEntity;
@@ -13,14 +14,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
-import org.postgresql.PGConnection;
-import org.postgresql.copy.CopyManager;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -37,17 +40,19 @@ public class DatasetService {
     private final DatasetMapper mapper;
     private final DataSourceService dataSourceService;
     private final ConnectionManager connectionManager;
+    private final AesGcmCipher cipher;
     private final TabularParser parser;
     private final MinioClient minio;
     private final String bucket;
     private final ObjectMapper om = new ObjectMapper();
 
     public DatasetService(DatasetMapper mapper, DataSourceService dataSourceService,
-                          ConnectionManager connectionManager, TabularParser parser,
+                          ConnectionManager connectionManager, AesGcmCipher cipher, TabularParser parser,
                           MinioClient minio, @Value("${daaspro.minio.bucket}") String bucket) {
         this.mapper = mapper;
         this.dataSourceService = dataSourceService;
         this.connectionManager = connectionManager;
+        this.cipher = cipher;
         this.parser = parser;
         this.minio = minio;
         this.bucket = bucket;
@@ -80,11 +85,7 @@ public class DatasetService {
                              List<String> columns, List<String> types, Long datasourceId,
                              String existingTable) {}
 
-    /**
-     * 确认导入。datasourceId 为空 → 内置数据源建新表；
-     * datasourceId=内置源 且 existingTable 非空 → 向已有表追加（校验列名完全一致）。
-     * 外部数据源不支持写入导入，MVP 只读。
-     */
+    /** 确认导入。目标数据源必填；existingTable 非空 → 向已有表追加（校验列名完全一致）。 */
     public DatasetEntity confirm(ConfirmReq req) {
         if (req.columns() == null || req.columns().isEmpty() || req.types() == null
                 || req.columns().size() != req.types().size()) {
@@ -100,14 +101,10 @@ public class DatasetService {
 
         DataSourceEntity target;
         if (req.datasourceId == null) {
-            target = builtinDatasource();
+            throw new BizException(400, "请选择目标数据源");
         } else {
             target = dataSourceService.getOwned(req.datasourceId());
-            if (!Boolean.TRUE.equals(target.getBuiltin())) {
-                throw new BizException(400, "外部数据源暂不支持上传导入（MVP 只读），请选择内置数据源");
-            }
         }
-        // 追加只对内置源有意义；未传 datasourceId 时也允许 append（默认内置源）
         boolean append = req.existingTable() != null && !req.existingTable().isBlank();
 
         if (!append) {
@@ -132,7 +129,7 @@ public class DatasetService {
             if (!actualNames.equals(columns)) {
                 throw new BizException(400, "列与目标表不一致。目标表列: " + actualNames);
             }
-            copyCount = copyInto(target, table, columns, csv, true);
+            copyCount = insertRows(target, table, columns, csv, true);
             // 追加到已有数据集：只更新其行数，不新建记录（否则删除任一条会连坐共享物理表）
             DatasetEntity existing = mapper.selectList(new LambdaQueryWrapper<DatasetEntity>()
                             .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
@@ -148,7 +145,7 @@ public class DatasetService {
         }
 
         table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        copyCount = createTableAndCopy(target, table, columns, types, csv);
+        copyCount = createTableAndInsert(target, table, columns, types, csv);
 
         DatasetEntity ds = new DatasetEntity();
         ds.setTenantId(TenantContext.requireTenantId());
@@ -162,18 +159,18 @@ public class DatasetService {
         return ds;
     }
 
-    /** 建表并 COPY 导入，返回导入行数。 */
-    private long createTableAndCopy(DataSourceEntity ds, String table,
+    /** 建表并批量 INSERT 导入，返回导入行数。 */
+    private long createTableAndInsert(DataSourceEntity ds, String table,
                                     List<String> columns, List<String> types, byte[] csv) {
         String colDefs = IntStream.range(0, columns.size())
-                .mapToObj(i -> quote(columns.get(i)) + " " + types.get(i))
+                .mapToObj(i -> quoteIdent(ds, columns.get(i)) + " " + types.get(i))
                 .reduce((a, b) -> a + ", " + b).orElse("");
-        String ddl = "CREATE TABLE " + quote(table) + " (" + colDefs + ")";
+        String ddl = "CREATE TABLE " + quoteIdent(ds, table) + " (" + colDefs + ")";
         try (Connection conn = openConnection(ds)) {
             try (var st = conn.createStatement()) {
                 st.execute(ddl);
             }
-            return copyInto(ds, table, columns, csv, true);
+            return insertRows(ds, table, columns, csv, true);
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
@@ -181,13 +178,36 @@ public class DatasetService {
         }
     }
 
-    private long copyInto(DataSourceEntity ds, String table, List<String> columns, byte[] csv, boolean header) {
-        String copySql = "COPY " + quote(table) + " (" + columns.stream().map(this::quote)
-                .reduce((a, b) -> a + "," + b).orElse("")
-                + ") FROM STDIN WITH (FORMAT csv, HEADER " + header + ", NULL '')";
-        try (Connection conn = openConnection(ds)) {
-            CopyManager cm = conn.unwrap(PGConnection.class).getCopyAPI();
-            return cm.copyIn(copySql, new ByteArrayInputStream(csv), 8192);
+    private long insertRows(DataSourceEntity ds, String table, List<String> columns, byte[] csv, boolean header) {
+        String colList = columns.stream().map(c -> quoteIdent(ds, c)).reduce((a, b) -> a + "," + b).orElse("");
+        String placeholders = "(" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
+        String insertSql = "INSERT INTO " + quoteIdent(ds, table) + " (" + colList + ") VALUES " + placeholders;
+        try (Connection conn = openConnection(ds);
+             var reader = CSVFormat.DEFAULT.parse(new java.io.InputStreamReader(
+                     new ByteArrayInputStream(csv), StandardCharsets.UTF_8))) {
+            long total = 0;
+            boolean first = true;
+            int batch = 0;
+            try (PreparedStatement st = conn.prepareStatement(insertSql)) {
+                for (CSVRecord record : reader) {
+                    if (first && header) { first = false; continue; }
+                    first = false;
+                    if (record.size() != columns.size()) {
+                        throw new BizException(400, "第 " + (total + 1) + " 行列数与定义不一致");
+                    }
+                    // 与旧 COPY 的 NULL '' 语义一致：空字符串导入为 NULL，避免数值/日期列类型错误
+                    for (int i = 0; i < columns.size(); i++) {
+                        String v = record.get(i);
+                        st.setString(i + 1, v == null || v.isEmpty() ? null : v);
+                    }
+                    st.addBatch();
+                    if (++batch >= 1000) { total += java.util.Arrays.stream(st.executeBatch()).sum(); batch = 0; }
+                }
+                if (batch > 0) total += java.util.Arrays.stream(st.executeBatch()).sum();
+            }
+            return total;
+        } catch (BizException e) {
+            throw e;
         } catch (Exception e) {
             throw new BizException(400, "导入失败: " + DataSourceService.rootMessage(e));
         }
@@ -195,10 +215,7 @@ public class DatasetService {
 
     private Connection openConnection(DataSourceEntity ds) {
         try {
-            if (Boolean.TRUE.equals(ds.getBuiltin())) {
-                return connectionManager.builtinPool(ds.getId(), ds.getSchemaName()).getConnection();
-            }
-            throw new BizException(400, "该数据源不支持导入");
+            return connectionManager.pool(ds, cipher.decrypt(ds.getPasswordEnc())).getConnection();
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
@@ -206,29 +223,15 @@ public class DatasetService {
         }
     }
 
-    /** 读取目标表列结构（内置 PG 源）。 */
+    /** 读取目标表列结构（按数据源类型）。 */
     private List<Map<String, String>> tableColumns(DataSourceEntity ds, String table) {
-        String sql = "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position";
-        try (Connection conn = openConnection(ds);
-             var st = conn.prepareStatement(sql)) {
-            st.setString(1, ds.getSchemaName());
-            st.setString(2, table);
-            try (var rs = st.executeQuery()) {
-                var rows = new ArrayList<Map<String, String>>();
-                while (rs.next()) rows.add(Map.of("name", rs.getString(1), "type", rs.getString(2)));
-                return rows;
-            }
-        } catch (BizException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BizException(400, "读取表结构失败: " + DataSourceService.rootMessage(e));
-        }
+        return dataSourceService.listColumns(ds.getId(), table, null);
     }
 
     /** 表实际行数（追加后刷新数据集计数用）。 */
     private long countRows(DataSourceEntity ds, String table) {
         try (Connection conn = openConnection(ds);
-             var st = conn.prepareStatement("SELECT count(*) FROM " + quote(table));
+             var st = conn.prepareStatement("SELECT count(*) FROM " + quoteIdent(ds, table));
              var rs = st.executeQuery()) {
             return rs.next() ? rs.getLong(1) : 0;
         } catch (Exception e) {
@@ -252,9 +255,9 @@ public class DatasetService {
     public Preview preview(Long id) {
         DatasetEntity d = getOwned(id);
         List<Map<String, String>> cols = parseColumns(d.getColumnsDef());
-        String sql = "SELECT * FROM " + quote(d.getTableName()) + " LIMIT 20";
-        DataSourceEntity builtin = builtinDatasource();
-        try (Connection conn = connectionManager.builtinPool(builtin.getId(), builtin.getSchemaName()).getConnection();
+        DataSourceEntity ds = dataSourceService.getOwned(d.getDatasourceId());
+        String sql = "SELECT * FROM " + quoteIdent(ds, d.getTableName()) + " LIMIT 20";
+        try (Connection conn = openConnection(ds);
              var st = conn.createStatement();
              var rs = st.executeQuery(sql)) {
             List<List<String>> rows = new ArrayList<>();
@@ -273,21 +276,19 @@ public class DatasetService {
 
     public void delete(Long id) {
         DatasetEntity d = getOwned(id);
-        DataSourceEntity builtin = builtinDatasource();
-        try (Connection conn = connectionManager.builtinPool(builtin.getId(), builtin.getSchemaName()).getConnection();
-             var st = conn.createStatement()) {
-            st.execute("DROP TABLE IF EXISTS " + quote(d.getTableName()));
+        try {
+            DataSourceEntity ds = dataSourceService.getOwned(d.getDatasourceId());
+            try (Connection conn = openConnection(ds);
+                 var st = conn.createStatement()) {
+                st.execute("DROP TABLE IF EXISTS " + quoteIdent(ds, d.getTableName()));
+            }
+        } catch (BizException e) {
+            if (!"数据源不存在".equals(e.getMessage())) throw e;
+            // 数据源已被删除：只清理数据集记录
         } catch (Exception e) {
             throw new BizException(400, "删除失败: " + DataSourceService.rootMessage(e));
         }
         mapper.deleteById(id);
-    }
-
-    private DataSourceEntity builtinDatasource() {
-        var list = dataSourceService.list().stream()
-                .filter(d -> Boolean.TRUE.equals(d.getBuiltin())).toList();
-        if (list.isEmpty()) throw new BizException(400, "内置数据源缺失");
-        return list.get(0);
     }
 
     private DatasetEntity getOwned(Long id) {
@@ -320,6 +321,14 @@ public class DatasetService {
 
     private String quote(String ident) {
         return "\"" + ident.replace("\"", "\"\"") + "\"";
+    }
+
+    /** MySQL 用反引号，其余（PG/SQL Server/Oracle）用双引号。 */
+    private String quoteIdent(DataSourceEntity ds, String ident) {
+        if ("mysql".equals(ds.getType())) {
+            return "`" + ident.replace("`", "``") + "`";
+        }
+        return quote(ident);
     }
 
     private String toColumnsJson(List<String> columns, List<String> types) {

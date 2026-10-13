@@ -35,6 +35,17 @@ class DatasetFlowTest {
 
     private String url(String p) { return bootRest.getRootUri() + p; }
 
+    /** 新规则：导入必须显式指定目标数据源。注册一个指向平台 PG 的外部数据源。 */
+    private long extDatasource(String token, String tag) {
+        var created = rest().postForEntity(url("/api/datasources"),
+                new HttpEntity<>(Map.of("name", "数据集PG-" + tag, "type", "postgresql",
+                        "host", "localhost", "port", 15432, "databaseName", "daaspro",
+                        "schemaName", "public", "username", "daaspro", "password", "daaspro_dev_2026"),
+                        jsonHeaders(token)), Map.class);
+        assertThat(created.getStatusCode().is2xxSuccessful()).isTrue();
+        return ((Number) created.getBody().get("id")).longValue();
+    }
+
     private String token() {
         String adminUser = "dsflow" + System.currentTimeMillis();
         rest().postForEntity(url("/api/tenant/register"),
@@ -62,6 +73,7 @@ class DatasetFlowTest {
     @Test
     void uploadConfirmPreviewDelete() {
         String token = token();
+        long dsId = extDatasource(token, "up" + System.currentTimeMillis());
         String csv = "名称,数量,价格,日期\n甲,10,1.5,2026-01-01\n乙,20,2.25,2026-01-02\n,,,\n丙,30,3.5,2026-01-03\n";
         ByteArrayResource res = new ByteArrayResource(csv.getBytes(StandardCharsets.UTF_8)) {
             @Override public String getFilename() { return "demo.csv"; }
@@ -82,7 +94,8 @@ class DatasetFlowTest {
                         "name", "演示数据集" + System.currentTimeMillis(),
                         "fileName", "demo.csv",
                         "columns", up.getBody().get("columns"),
-                        "types", up.getBody().get("types")), jsonHeaders(token)), Map.class);
+                        "types", up.getBody().get("types"),
+                        "datasourceId", dsId), jsonHeaders(token)), Map.class);
         assertThat(confirm.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(((Number) confirm.getBody().get("rowCount")).longValue()).isEqualTo(4L);
 
@@ -104,14 +117,15 @@ class DatasetFlowTest {
     @Test
     void appendToExistingTable() {
         String token = token();
+        long dsId = extDatasource(token, "ap" + System.currentTimeMillis());
         // 第一次上传导入建表
         String csv1 = "名称,数量\n甲,10\n乙,20\n";
-        Map<String, Object> first = doImport(token, csv1, "追加测试" + System.currentTimeMillis(), null);
+        Map<String, Object> first = doImport(token, csv1, "追加测试" + System.currentTimeMillis(), null, dsId);
         String table = (String) first.get("tableName");
 
         // 第二次同结构文件追加：应合并进第一个数据集（不新建记录，避免共享物理表被连坐删除）
         String csv2 = "名称,数量\n丙,30\n";
-        Map<String, Object> second = doImport(token, csv2, "追加批次" + System.currentTimeMillis(), table);
+        Map<String, Object> second = doImport(token, csv2, "追加批次" + System.currentTimeMillis(), table, dsId);
         assertThat(((Number) second.get("id")).longValue()).isEqualTo(((Number) first.get("id")).longValue());
 
         // 预览第一批：表里现在应该有 3 行（preview LIMIT 20 覆盖全部）
@@ -120,7 +134,7 @@ class DatasetFlowTest {
         assertThat((java.util.List<Object>) preview.getBody().get("rows")).hasSize(3);
     }
 
-    private Map<String, Object> doImport(String token, String csv, String name, String existingTable) {
+    private Map<String, Object> doImport(String token, String csv, String name, String existingTable, long datasourceId) {
         ByteArrayResource res = new ByteArrayResource(csv.getBytes(StandardCharsets.UTF_8)) {
             @Override public String getFilename() { return "part.csv"; }
         };
@@ -134,6 +148,7 @@ class DatasetFlowTest {
         payload.put("fileName", "part.csv");
         payload.put("columns", up.getBody().get("columns"));
         payload.put("types", up.getBody().get("types"));
+        payload.put("datasourceId", datasourceId);
         if (existingTable != null) payload.put("existingTable", existingTable);
         var confirm = rest().postForEntity(url("/api/datasets/confirm"),
                 new HttpEntity<>(payload, jsonHeaders(token)), Map.class);
@@ -164,12 +179,14 @@ class DatasetFlowTest {
         String uploadId = (String) up.getBody().get("uploadId");
 
         String t2 = token();
+        long dsId2 = extDatasource(t2, "x2" + System.currentTimeMillis());
         var confirm = rest().postForEntity(url("/api/datasets/confirm"),
                 new HttpEntity<>(Map.of(
                         "uploadId", uploadId,
                         "name", "越权数据集" + System.currentTimeMillis(),
                         "columns", up.getBody().get("columns"),
-                        "types", up.getBody().get("types")), jsonHeaders(t2)), Map.class);
+                        "types", up.getBody().get("types"),
+                        "datasourceId", dsId2), jsonHeaders(t2)), Map.class);
         assertThat(confirm.getStatusCode().value()).isEqualTo(400);
     }
 }

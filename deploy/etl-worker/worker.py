@@ -28,6 +28,8 @@ PORT = int(os.environ.get("DAASPRO_WORKER_PORT", "8090"))
 LOG = logging.getLogger("etl-worker")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 PARAM = re.compile(r"(?<!:):([A-Za-z_][A-Za-z0-9_]*)")
+# 容器内运行时，回环地址指向容器自身；改写为宿主机网关才能连到宿主端口映射
+GATEWAY_REWRITE = os.environ.get("DAASPRO_WORKER_GATEWAY_REWRITE", "1") == "1"
 CREATE_TABLE = re.compile(
     r"(?is)^\s*(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)"
     r"((?:\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*)(?:\s*\.\s*(?:\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_$]*))?)"
@@ -158,7 +160,10 @@ class Worker:
     def _connect(self, config: dict[str, Any]):
         if config.get("type") != "postgresql":
             raise ValueError("当前 Worker 实际执行器仅支持 PostgreSQL")
-        return psycopg.connect(host=config["host"], port=config["port"], dbname=config["databaseName"],
+        host = config["host"]
+        if GATEWAY_REWRITE and host in ("localhost", "127.0.0.1", "::1"):
+            host = "host.docker.internal"
+        return psycopg.connect(host=host, port=config["port"], dbname=config["databaseName"],
                                user=config["username"], password=config["password"], autocommit=True)
 
     def _execute_mapping(self, run: Run, mapping: dict[str, Any]) -> None:

@@ -117,7 +117,7 @@ public class OpenApiService {
         if (granted == 0) throw new OpenApiException(404, "该应用未被授权调用此 API");
         DatasetEntity dataset = datasetMapper.selectById(api.getDatasetId());
         DataSourceEntity ds = dataset == null ? null : dsMapper.selectById(dataset.getDatasourceId());
-        if (dataset == null || ds == null || !Boolean.TRUE.equals(ds.getBuiltin())) {
+        if (dataset == null || ds == null) {
             throw new OpenApiException(404, "API 配置异常：数据集或数据源缺失");
         }
         return new Resolved(api, dataset, ds);
@@ -164,7 +164,7 @@ public class OpenApiService {
             orderSql = " ORDER BY " + quote(orderBy) + (desc ? " DESC" : " ASC");
         }
 
-        DataSource pool = connectionManager.builtinPool(r.datasource().getId(), r.datasource().getSchemaName());
+        DataSource pool = connectionManager.pool(r.datasource(), cipher.decrypt(r.datasource().getPasswordEnc()));
         try (Connection conn = pool.getConnection()) {
             long total;
             try (PreparedStatement st = conn.prepareStatement("SELECT count(*) FROM " + table + where)) {

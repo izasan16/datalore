@@ -32,7 +32,7 @@ public class DataSourceController {
     public List<Map<String, Object>> list() {
         return service.list().stream().map(ds -> Map.<String, Object>of(
                 "id", ds.getId(), "name", ds.getName(), "type", ds.getType(),
-                "builtin", ds.getBuiltin(), "host", ds.getHost() == null ? "" : ds.getHost(),
+                "host", ds.getHost() == null ? "" : ds.getHost(),
                 "port", ds.getPort() == null ? 0 : ds.getPort(),
                 "databaseName", ds.getDatabaseName() == null ? "" : ds.getDatabaseName(),
                 "schemaName", ds.getSchemaName() == null ? "" : ds.getSchemaName(),

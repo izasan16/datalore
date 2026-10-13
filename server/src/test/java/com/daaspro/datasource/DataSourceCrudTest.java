@@ -22,7 +22,7 @@ class DataSourceCrudTest {
     private long newTenant(String prefix) {
         var slug = tenantService.registerAutoSlug("租户" + prefix + System.nanoTime(), "adm_" + prefix + System.nanoTime(), "password123");
         var t = tenantService.getTenantIdBySlug(slug);
-        TenantContext.set(new TenantContext.Ctx(t, 1L, "admin", "admin", "tenant_" + slug));
+        TenantContext.set(new TenantContext.Ctx(t, 1L, "admin", "admin"));
         return t;
     }
 
@@ -68,10 +68,10 @@ class DataSourceCrudTest {
     void crossTenantAccessDenied() {
         long a = newTenant("dsisoa");
         long b = newTenant("dsisob");
-        TenantContext.set(new TenantContext.Ctx(a, 1L, "admin", "admin", "tenant_" + a));
+        TenantContext.set(new TenantContext.Ctx(a, 1L, "admin", "admin"));
         var ds = service.create("隔离", "postgresql", "localhost", 15432,
                 "daaspro", "public", "daaspro", "daaspro_dev_2026");
-        TenantContext.set(new TenantContext.Ctx(b, 2L, "admin", "admin", "tenant_" + b));
+        TenantContext.set(new TenantContext.Ctx(b, 2L, "admin", "admin"));
         assertThatThrownBy(() -> service.getOwned(ds.getId()))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("不存在");

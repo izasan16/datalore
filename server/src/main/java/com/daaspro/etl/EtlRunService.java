@@ -30,19 +30,12 @@ public class EtlRunService {
     private final DataSourceService dataSourceService;
     private final AesGcmCipher cipher;
     private final RestClient worker;
-    private final String platformUrl;
-    private final String platformUser;
-    private final String platformPassword;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public EtlRunService(EtlRunMapper runMapper, EtlService etlService, DataSourceService dataSourceService,
                          AesGcmCipher cipher, @Value("${daaspro.etl.worker-url:http://localhost:8090}") String workerUrl,
-                         @Value("${daaspro.etl.worker-token:dev-worker-token}") String workerToken,
-                         @Value("${spring.datasource.url}") String platformUrl,
-                         @Value("${spring.datasource.username}") String platformUser,
-                         @Value("${spring.datasource.password}") String platformPassword) {
+                         @Value("${daaspro.etl.worker-token:dev-worker-token}") String workerToken) {
         this.runMapper = runMapper; this.etlService = etlService; this.dataSourceService = dataSourceService; this.cipher = cipher;
-        this.platformUrl = platformUrl; this.platformUser = platformUser; this.platformPassword = platformPassword;
         this.worker = RestClient.builder().baseUrl(workerUrl).defaultHeader("Authorization", "Bearer " + workerToken).build();
     }
 
@@ -126,17 +119,8 @@ public class EtlRunService {
     private Map<String, Object> connection(DataSourceEntity ds) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("type", ds.getType());
-        if (Boolean.TRUE.equals(ds.getBuiltin())) {
-            var parsed = java.util.regex.Pattern.compile("jdbc:postgresql://([^:/]+)(?::(\\d+))?/([^?]+)").matcher(platformUrl);
-            boolean matched = parsed.find();
-            m.put("host", matched ? parsed.group(1) : "localhost");
-            m.put("port", matched ? Integer.parseInt(parsed.group(2) == null ? "5432" : parsed.group(2)) : 5432);
-            m.put("databaseName", matched ? parsed.group(3) : "daaspro");
-            m.put("username", platformUser); m.put("password", platformPassword);
-        } else {
-            m.put("host", ds.getHost()); m.put("port", ds.getPort()); m.put("databaseName", ds.getDatabaseName());
-            m.put("username", ds.getUsername()); m.put("password", ds.getPasswordEnc() == null ? "" : cipher.decrypt(ds.getPasswordEnc()));
-        }
+        m.put("host", ds.getHost()); m.put("port", ds.getPort()); m.put("databaseName", ds.getDatabaseName());
+        m.put("username", ds.getUsername()); m.put("password", ds.getPasswordEnc() == null ? "" : cipher.decrypt(ds.getPasswordEnc()));
         return m;
     }
     private List<Map<String, Object>> readList(String json) { try { return objectMapper.readValue(json == null ? "[]" : json, new TypeReference<>() {}); } catch (Exception e) { throw new BizException(400, "字段映射配置损坏"); } }

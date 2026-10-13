@@ -31,7 +31,6 @@ public class DataSourceService {
     public List<DataSourceEntity> list() {
         return mapper.selectList(new LambdaQueryWrapper<DataSourceEntity>()
                 .eq(DataSourceEntity::getTenantId, TenantContext.requireTenantId())
-                .orderByDesc(DataSourceEntity::getBuiltin)
                 .orderByAsc(DataSourceEntity::getId));
     }
 
@@ -57,7 +56,6 @@ public class DataSourceService {
         ds.setTenantId(TenantContext.requireTenantId());
         ds.setName(name);
         ds.setType(type);
-        ds.setBuiltin(false);
         ds.setHost(host);
         ds.setPort(port != null ? port : JdbcUrls.of(type).defaultPort());
         ds.setDatabaseName(databaseName);
@@ -71,9 +69,6 @@ public class DataSourceService {
 
     public void delete(Long id) {
         DataSourceEntity ds = getOwned(id);
-        if (Boolean.TRUE.equals(ds.getBuiltin())) {
-            throw new BizException(400, "内置数据源不可删除");
-        }
         connectionManager.closePool(id);
         mapper.deleteById(id);
     }
@@ -98,8 +93,7 @@ public class DataSourceService {
 
     public List<Map<String, String>> listSchemas(Long id) {
         DataSourceEntity ds = getOwned(id);
-        boolean builtin = Boolean.TRUE.equals(ds.getBuiltin());
-        String sql = builtin ? JdbcUrls.POSTGRESQL.listSchemasSql() : JdbcUrls.of(ds.getType()).listSchemasSql();
+        String sql = JdbcUrls.of(ds.getType()).listSchemasSql();
         try (var conn = open(ds); var st = conn.prepareStatement(sql); var rs = st.executeQuery()) {
             var rows = new ArrayList<Map<String, String>>();
             while (rs.next()) rows.add(Map.of("name", rs.getString(1)));
@@ -113,13 +107,9 @@ public class DataSourceService {
 
     public List<Map<String, String>> listTables(Long id, String schemaParam) {
         DataSourceEntity ds = getOwned(id);
-        boolean builtin = Boolean.TRUE.equals(ds.getBuiltin());
         String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
-        String sql = builtin
-                ? "SELECT tablename FROM pg_tables WHERE schemaname = ? ORDER BY 1"
-                : JdbcUrls.of(ds.getType()).listTablesSql(schema);
+        String sql = JdbcUrls.of(ds.getType()).listTablesSql(schema);
         try (var conn = open(ds); var st = conn.prepareStatement(sql)) {
-            if (builtin) st.setString(1, schema);
             try (var rs = st.executeQuery()) {
                 var rows = new ArrayList<Map<String, String>>();
                 while (rs.next()) rows.add(Map.of("name", rs.getString(1)));
@@ -148,14 +138,11 @@ public class DataSourceService {
     }
 
     private java.sql.Connection open(DataSourceEntity ds) throws Exception {
-        if (Boolean.TRUE.equals(ds.getBuiltin())) {
-            return connectionManager.builtinPool(ds.getId(), ds.getSchemaName()).getConnection();
-        }
         return connectionManager.pool(ds, cipher.decrypt(ds.getPasswordEnc())).getConnection();
     }
 
     private String defaultSchema(DataSourceEntity ds) {
-        if (Boolean.TRUE.equals(ds.getBuiltin()) || "postgresql".equals(ds.getType())) {
+        if ("postgresql".equals(ds.getType())) {
             return ds.getSchemaName() == null ? "public" : ds.getSchemaName();
         }
         return switch (ds.getType()) {

@@ -15,7 +15,6 @@ public class DataSourceEntity {
     private Long tenantId;
     private String name;
     private String type;
-    private Boolean builtin;
     private String host;
     private Integer port;
     private String databaseName;

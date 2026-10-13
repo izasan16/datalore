@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { LogoMark, CheckIcon } from '../../components/Brand';
 
 const FEATURES = [
-  '多租户数据平台，内置 PostgreSQL 底座',
+  '多租户数据平台，数据落在您自己的数据库',
   'SQL 分析与脚本参数化复用',
   '数据一键发布为 REST API',
   '拖拽式可视化分析与仪表盘',

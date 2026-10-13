@@ -39,17 +39,18 @@ class ApiPubFlowTest {
         String slug = tag + (System.nanoTime() % 100000000);
         long tid = tenantService.getTenantIdBySlug(
                 tenantService.registerAutoSlug("API租户" + slug, "adm" + slug, "password123"));
-        TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin", "tenant_" + slug));
-        var builtin = dataSourceService.list().stream()
-                .filter(d -> Boolean.TRUE.equals(d.getBuiltin())).findFirst().orElseThrow();
-        gateway.run(String.valueOf(builtin.getId()), "CREATE TABLE t_open(id bigint, name text, city text)");
-        gateway.run(String.valueOf(builtin.getId()),
-                "INSERT INTO t_open VALUES (1,'Ann','SH'),(2,'Bob','BJ'),(3,'Cid','SH')");
+        TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin"));
+        var source = dataSourceService.create("API-PG-" + slug, "postgresql", "localhost", 15432,
+                "daaspro", "public", "daaspro", "daaspro_dev_2026");
+        String table = "t_open_" + slug;
+        gateway.run(String.valueOf(source.getId()), "CREATE TABLE " + table + "(id bigint, name text, city text)");
+        gateway.run(String.valueOf(source.getId()),
+                "INSERT INTO " + table + " VALUES (1,'Ann','SH'),(2,'Bob','BJ'),(3,'Cid','SH')");
         DatasetEntity ds = new DatasetEntity();
         ds.setTenantId(tid);
         ds.setName("城市数据" + slug);
-        ds.setTableName("t_open");
-        ds.setDatasourceId(builtin.getId());
+        ds.setTableName(table);
+        ds.setDatasourceId(source.getId());
         ds.setColumnsDef("[{\"name\":\"id\",\"type\":\"bigint\"},{\"name\":\"name\",\"type\":\"text\"},{\"name\":\"city\",\"type\":\"text\"}]");
         ds.setRowCount(3L);
         ds.setFileName("test.csv");
@@ -149,7 +150,7 @@ class ApiPubFlowTest {
         String slugB = "xb" + (System.nanoTime() % 100000000);
         long b = tenantService.getTenantIdBySlug(
                 tenantService.registerAutoSlug("B" + slugB, "admb" + slugB, "password123"));
-        TenantContext.set(new TenantContext.Ctx(b, 2L, "admb", "admin", "tenant_" + slugB));
+        TenantContext.set(new TenantContext.Ctx(b, 2L, "admb", "admin"));
         assertThatThrownBy(() -> pubService.getOwned(api.getId()))
                 .isInstanceOf(BizException.class).hasMessageContaining("不存在");
         // order_by 非暴露列 → 400（用B租户上下文也行，resolve 不查 TenantContext）

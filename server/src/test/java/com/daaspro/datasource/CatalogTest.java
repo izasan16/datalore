@@ -18,17 +18,17 @@ class CatalogTest {
     @Autowired DataSourceService dataSourceService;
 
     @Test
-    void builtinAutoRegisteredAndBrowsable() {
+    void newTenantHasNoDefaultSourceAndExternalBrowsable() {
         String slug = tenantService.registerAutoSlug("目录租户" + System.nanoTime(), "admcat" + System.nanoTime(), "password123");
         Long tid = tenantService.getTenantIdBySlug(slug);
 
-        TenantContext.set(new TenantContext.Ctx(tid, 1L, "admin", "admin", "tenant_" + slug));
-        var list = dataSourceService.list();
-        assertThat(list).anyMatch(d -> Boolean.TRUE.equals(d.getBuiltin()));
-        var builtin = list.stream().filter(d -> Boolean.TRUE.equals(d.getBuiltin())).findFirst().orElseThrow();
+        TenantContext.set(new TenantContext.Ctx(tid, 1L, "admin", "admin"));
+        assertThat(dataSourceService.list()).isEmpty();
 
-        var tables = dataSourceService.listTables(builtin.getId(), null);
-        assertThat(tables).isEmpty();
+        var ds = dataSourceService.create("目录PG" + slug, "postgresql", "localhost", 15432,
+                "daaspro", "public", "daaspro", "daaspro_dev_2026");
+        assertThat(dataSourceService.listSchemas(ds.getId())).isNotEmpty();
+        assertThat(dataSourceService.listTables(ds.getId(), null)).isNotNull();
 
         TenantContext.clear();
     }

@@ -4,7 +4,6 @@ export interface DataSourceInfo {
   id: number;
   name: string;
   type: string;
-  builtin: boolean;
   host: string;
   port: number;
   databaseName: string;

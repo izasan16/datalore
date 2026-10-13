@@ -3,7 +3,7 @@ package com.daaspro.tenant.context;
 public final class TenantContext {
     private static final ThreadLocal<Ctx> HOLDER = new ThreadLocal<>();
 
-    public record Ctx(Long tenantId, Long userId, String username, String role, String schemaName) {}
+    public record Ctx(Long tenantId, Long userId, String username, String role) {}
 
     public static void set(Ctx ctx) { HOLDER.set(ctx); }
 

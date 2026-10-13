@@ -8,8 +8,9 @@ public enum JdbcUrls {
     POSTGRESQL {
         @Override
         public String url(String host, int port, String db, String schema) {
-            String u = "jdbc:postgresql://" + host + ":" + port + "/" + db;
-            return schema == null ? u : u + "?currentSchema=" + schema;
+            // stringtype=unspecified：字符串参数由数据库按目标列推断类型（批量 INSERT 导入依赖此行为）
+            String u = "jdbc:postgresql://" + host + ":" + port + "/" + db + "?stringtype=unspecified";
+            return schema == null ? u : u + "&currentSchema=" + schema;
         }
         @Override
         public int defaultPort() { return 5432; }

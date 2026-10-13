@@ -24,10 +24,10 @@ class SqlGatewayLimitsTest {
         String slug = "lm" + (System.nanoTime() % 100000000);
         long tid = tenantService.getTenantIdBySlug(
                 tenantService.registerAutoSlug("限额租户" + slug, "adm" + slug, "password123"));
-        TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin", "tenant_" + slug));
-        var builtin = dataSourceService.list().stream()
-                .filter(d -> Boolean.TRUE.equals(d.getBuiltin())).findFirst().orElseThrow();
-        return String.valueOf(builtin.getId());
+        TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin"));
+        var ds = dataSourceService.create("限额PG" + slug, "postgresql", "localhost", 15432,
+                "daaspro", "public", "daaspro", "daaspro_dev_2026");
+        return String.valueOf(ds.getId());
     }
 
     @Test

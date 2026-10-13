@@ -64,8 +64,6 @@ export default function SqlLabPage() {
     try {
       const list = await listDatasources();
       setDsList(list);
-      const builtin = list.find((d) => d.builtin);
-      if (builtin) setDatasourceId(builtin.id);
     } catch {
       setDatasourcesError(true);
     } finally {
@@ -287,7 +285,7 @@ export default function SqlLabPage() {
             placeholder="选择数据源"
             options={dsList.map((d) => ({
               value: d.id,
-              label: d.builtin ? `${d.name}（内置，可写入）` : `${d.name}（${d.type}，只读）`,
+              label: `${d.name}（${d.type}）`,
             }))}
           />
           <Button type="primary" icon={<IconPlayArrow />} loading={running} onClick={() => runRef.current()}>

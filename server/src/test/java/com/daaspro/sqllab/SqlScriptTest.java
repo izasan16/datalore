@@ -22,7 +22,7 @@ class SqlScriptTest {
         String slug = "sc" + (System.nanoTime() % 100000000);
         long tid = tenantService.getTenantIdBySlug(
                 tenantService.registerAutoSlug("脚本租户" + slug, "adm" + slug, "password123"));
-        TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin", "tenant_" + slug));
+        TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin"));
         return tid;
     }
 
@@ -57,7 +57,7 @@ class SqlScriptTest {
         String slugB = "scb" + (System.nanoTime() % 100000000);
         long b = tenantService.getTenantIdBySlug(
                 tenantService.registerAutoSlug("B租户" + slugB, "admb" + slugB, "password123"));
-        TenantContext.set(new TenantContext.Ctx(b, 2L, "admb", "admin", "tenant_" + slugB));
+        TenantContext.set(new TenantContext.Ctx(b, 2L, "admb", "admin"));
         assertThat(service.list()).noneMatch(x -> x.getId().equals(s.getId()));
         assertThatThrownBy(() -> service.get(s.getId()))
                 .isInstanceOf(BizException.class).hasMessageContaining("不存在");

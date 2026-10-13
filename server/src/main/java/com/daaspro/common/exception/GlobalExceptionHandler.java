@@ -21,8 +21,14 @@ public class GlobalExceptionHandler {
         HttpStatus status = e.getCode() == 401 ? HttpStatus.UNAUTHORIZED
                 : e.getCode() == 403 ? HttpStatus.FORBIDDEN
                 : HttpStatus.BAD_REQUEST;
-        String json = "{\"code\":" + e.getCode()
-                + ",\"message\":\"" + e.getMessage().replace("\"", "'") + "\"}";
+        // Jackson 序列化：原生错误消息可能含引号/换行，手拼 JSON 会产生非法 body
+        String json;
+        try {
+            json = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(Map.of("code", e.getCode(), "message", e.getMessage()));
+        } catch (Exception ignored) {
+            json = "{\"code\":" + e.getCode() + ",\"message\":\"操作失败\"}";
+        }
         return ResponseEntity.status(status)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(json);
