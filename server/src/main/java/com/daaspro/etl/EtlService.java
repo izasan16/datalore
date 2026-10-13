@@ -5,7 +5,9 @@ import com.daaspro.common.exception.BizException;
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.service.DataSourceService;
 import com.daaspro.etl.entity.EtlTaskEntity;
+import com.daaspro.etl.entity.EtlRunEntity;
 import com.daaspro.etl.mapper.EtlTaskMapper;
+import com.daaspro.etl.mapper.EtlRunMapper;
 import com.daaspro.tenant.context.TenantContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,11 +22,13 @@ import java.util.Map;
 @Service
 public class EtlService {
     private final EtlTaskMapper taskMapper;
+    private final EtlRunMapper runMapper;
     private final DataSourceService dataSourceService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public EtlService(EtlTaskMapper taskMapper, DataSourceService dataSourceService) {
+    public EtlService(EtlTaskMapper taskMapper, EtlRunMapper runMapper, DataSourceService dataSourceService) {
         this.taskMapper = taskMapper;
+        this.runMapper = runMapper;
         this.dataSourceService = dataSourceService;
     }
 
@@ -103,6 +107,8 @@ public class EtlService {
     public void deleteTask(Long id) {
         EtlTaskEntity task = getTask(id);
         if ("ACTIVE".equals(task.getStatus())) throw new BizException(400, "请先暂停任务再删除");
+        runMapper.delete(new LambdaQueryWrapper<EtlRunEntity>()
+                .eq(EtlRunEntity::getTaskId, id));
         taskMapper.deleteById(id);
     }
 

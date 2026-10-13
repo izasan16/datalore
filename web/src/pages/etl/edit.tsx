@@ -386,8 +386,7 @@ export default function EtlEditPage() {
               : <Button type="primary" loading={saving} onClick={nextStep}>下一步</Button>}
           </Space>
         </Form>
-        {step >= 2 && (
-          <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 24, display: step === 2 ? 'block' : 'none' }}>
             <Form form={mappingForm} layout="vertical" initialValues={{ inputType: 'TABLE', targetTableMode: 'CREATE', writeMode: 'APPEND' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 <Form.Item field="inputType" label="输入类型">
@@ -485,7 +484,6 @@ export default function EtlEditPage() {
               )}
             </Form>
           </div>
-        )}
       </section>
     </div>
   );
