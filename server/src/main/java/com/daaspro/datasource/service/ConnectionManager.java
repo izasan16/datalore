@@ -31,10 +31,16 @@ public class ConnectionManager {
                 cfg.setPoolName("ds-" + id);
                 return new HikariDataSource(cfg);
             } catch (RuntimeException e) {
-                // 池初始化失败（连不上/认证失败等）透传数据库原生根因，不做 500 包装
+                // 池初始化失败（连不上/认证失败等）给出可理解的原因；SQL 执行错误仍由网关透传原生消息
                 Throwable root = e;
                 while (root.getCause() != null) root = root.getCause();
-                throw new BizException(400, root.getMessage() == null ? "数据源连接失败" : root.getMessage());
+                String msg;
+                if (root instanceof java.net.UnknownHostException uhe) {
+                    msg = "无法解析数据源主机 " + uhe.getMessage() + "，请检查主机名是否正确";
+                } else {
+                    msg = "数据源连接失败: " + (root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage());
+                }
+                throw new BizException(400, msg);
             }
         });
     }

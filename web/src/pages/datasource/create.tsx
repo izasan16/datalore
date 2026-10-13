@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Form, Grid, Input, InputNumber, Message, Select, Space, Typography } from '@arco-design/web-react';
-import { createDatasource } from '../../api/datasource';
+import { createDatasource, listDatasources, updateDatasource } from '../../api/datasource';
 import { http } from '../../api/http';
 
 const { Row, Col } = Grid;
@@ -17,9 +17,26 @@ const TYPE_OPTIONS = Object.entries(TYPE_LABEL).map(([value, label]) => ({ value
 
 export default function DatasourceCreatePage() {
   const nav = useNavigate();
+  const { id } = useParams();
+  const editingId = id ? Number(id) : undefined;
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [loaded, setLoaded] = useState(!editingId);
   const [form] = Form.useForm();
+
+  if (editingId && !loaded) {
+    listDatasources().then((list) => {
+      const ds = list.find((d) => d.id === editingId);
+      if (ds) {
+        form.setFieldsValue({
+          name: ds.name, type: ds.type, host: ds.host, port: ds.port,
+          databaseName: ds.databaseName, schemaName: ds.schemaName || undefined,
+          username: undefined, password: undefined,
+        });
+      }
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }
 
   async function onTest() {
     // 只校验连接相关字段，避免被未填的「名称」阻塞；校验失败 Arco 自动标红
@@ -47,20 +64,33 @@ export default function DatasourceCreatePage() {
   async function onSubmit(v: any) {
     setSaving(true);
     try {
-      await createDatasource({
-        name: v.name,
-        type: v.type,
-        host: v.host,
-        port: v.port || undefined,
-        databaseName: v.databaseName,
-        schemaName: v.schemaName || undefined,
-        username: v.username,
-        password: v.password,
-      });
-      Message.success('数据源已创建');
+      if (editingId) {
+        await updateDatasource(editingId, {
+          name: v.name,
+          host: v.host,
+          port: v.port || undefined,
+          databaseName: v.databaseName,
+          schemaName: v.schemaName || undefined,
+          username: v.username || undefined,
+          password: v.password || undefined,
+        });
+        Message.success('数据源已更新');
+      } else {
+        await createDatasource({
+          name: v.name,
+          type: v.type,
+          host: v.host,
+          port: v.port || undefined,
+          databaseName: v.databaseName,
+          schemaName: v.schemaName || undefined,
+          username: v.username,
+          password: v.password,
+        });
+        Message.success('数据源已创建');
+      }
       nav('/datasource');
     } catch (e: any) {
-      Message.error(e.response?.data?.message || '创建失败');
+      Message.error(e.response?.data?.message || (editingId ? '更新失败' : '创建失败'));
     } finally {
       setSaving(false);
     }
@@ -71,10 +101,10 @@ export default function DatasourceCreatePage() {
       <div className="page-header">
         <div className="page-header-main">
           <Typography.Title heading={4} style={{ margin: 0 }}>
-            新建数据源
+            {editingId ? '编辑数据源' : '新建数据源'}
           </Typography.Title>
           <Typography.Text type="secondary">
-            填写数据库连接信息，保存前可先测试连通性
+            {editingId ? '修改连接信息，密码留空保持不变' : '填写数据库连接信息，保存前可先测试连通性'}
           </Typography.Text>
         </div>
         <div className="page-header-actions">
@@ -97,7 +127,7 @@ export default function DatasourceCreatePage() {
             </Col>
             <Col xs={24} sm={12}>
               <Form.Item label="类型" field="type" rules={[{ required: true, message: '请选择类型' }]}>
-                <Select options={TYPE_OPTIONS} />
+                <Select options={TYPE_OPTIONS} disabled={!!editingId} />
               </Form.Item>
             </Col>
           </Row>
@@ -132,8 +162,9 @@ export default function DatasourceCreatePage() {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item label="密码" field="password" rules={[{ required: true, message: '请输入密码' }]}>
-                <Input.Password placeholder="密码" />
+              <Form.Item label={editingId ? '密码（留空保持不变）' : '密码'} field="password"
+                rules={editingId ? [] : [{ required: true, message: '请输入密码' }]}>
+                <Input.Password placeholder={editingId ? '留空保持原密码' : '密码'} />
               </Form.Item>
             </Col>
           </Row>

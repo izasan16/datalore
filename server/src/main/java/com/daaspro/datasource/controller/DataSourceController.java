@@ -24,6 +24,9 @@ public class DataSourceController {
                             Integer port, @NotBlank String databaseName, String schemaName,
                             @NotBlank String username, @NotBlank String password) {}
 
+    public record UpdateReq(String name, String host, Integer port, String databaseName,
+                            String schemaName, String username, String password) {}
+
     public record TestReq(@NotBlank String type, @NotBlank String host, Integer port,
                           @NotBlank String databaseName, String schemaName,
                           @NotBlank String username, @NotBlank String password) {}
@@ -42,6 +45,13 @@ public class DataSourceController {
     @PostMapping
     public Map<String, Object> create(@RequestBody CreateReq req) {
         var ds = service.create(req.name(), req.type(), req.host(), req.port(),
+                req.databaseName(), req.schemaName(), req.username(), req.password());
+        return Map.of("id", ds.getId());
+    }
+
+    @PutMapping("/{id}")
+    public Map<String, Object> update(@PathVariable Long id, @RequestBody UpdateReq req) {
+        var ds = service.update(id, req.name(), req.host(), req.port(),
                 req.databaseName(), req.schemaName(), req.username(), req.password());
         return Map.of("id", ds.getId());
     }

@@ -67,6 +67,28 @@ public class DataSourceService {
         return ds;
     }
 
+    /** 编辑数据源；密码留空表示保持原密码。更新后关闭旧连接池，下次访问按新配置重建。 */
+    public DataSourceEntity update(Long id, String name, String host, Integer port,
+                                   String databaseName, String schemaName, String username, String password) {
+        DataSourceEntity ds = getOwned(id);
+        if (name != null && !name.isBlank() && !name.equals(ds.getName())) {
+            Long dup = mapper.selectCount(new LambdaQueryWrapper<DataSourceEntity>()
+                    .eq(DataSourceEntity::getTenantId, TenantContext.requireTenantId())
+                    .eq(DataSourceEntity::getName, name.trim()));
+            if (dup > 0) throw new BizException(400, "同名数据源已存在");
+            ds.setName(name.trim());
+        }
+        if (host != null && !host.isBlank()) ds.setHost(host.trim());
+        if (port != null) ds.setPort(port);
+        if (databaseName != null && !databaseName.isBlank()) ds.setDatabaseName(databaseName.trim());
+        ds.setSchemaName(schemaName == null || schemaName.isBlank() ? null : schemaName.trim());
+        if (username != null && !username.isBlank()) ds.setUsername(username.trim());
+        if (password != null && !password.isBlank()) ds.setPasswordEnc(cipher.encrypt(password));
+        mapper.updateById(ds);
+        connectionManager.closePool(id);
+        return ds;
+    }
+
     public void delete(Long id) {
         DataSourceEntity ds = getOwned(id);
         connectionManager.closePool(id);

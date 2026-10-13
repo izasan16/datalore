@@ -150,6 +150,7 @@ export default function DatasourcePage() {
                   render: (_: unknown, row: DataSourceInfo) => (
                     <Space>
                       <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
+                      <Button size="mini" type="text" onClick={() => nav(`/datasource/${row.id}/edit`)}>编辑</Button>
                       <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
                       {(
                         <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>

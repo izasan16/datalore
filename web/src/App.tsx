@@ -44,6 +44,7 @@ export default function App() {
         <Route path="/workspace" element={<WorkspacePage />} />
         <Route path="/datasource" element={<DatasourcePage />} />
         <Route path="/datasource/new" element={<DatasourceCreatePage />} />
+        <Route path="/datasource/:id/edit" element={<DatasourceCreatePage />} />
         <Route path="/datamanage" element={<DatasetPage />} />
         <Route path="/datamanage/new" element={<DatasetNewPage />} />
         <Route path="/sqllab" element={<SqlLabPage />} />

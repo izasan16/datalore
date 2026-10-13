@@ -27,6 +27,13 @@ export function createDatasource(payload: {
   return http.post('/datasources', payload).then((r) => r.data);
 }
 
+export function updateDatasource(id: number, payload: {
+  name?: string; host?: string; port?: number;
+  databaseName?: string; schemaName?: string; username?: string; password?: string;
+}) {
+  return http.put(`/datasources/${id}`, payload).then((r) => r.data);
+}
+
 export function testDatasource(id: number) {
   return http.post(`/datasources/${id}/test`).then((r) => r.data);
 }
