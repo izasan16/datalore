@@ -174,11 +174,14 @@ class Worker:
             raise ValueError("至少选择一个字段")
         source_schema = identifier(source.get("schema") or "public")
         target_schema = identifier(target.get("schema") or "public")
-        source_table = identifier(source["table"])
         target_table = identifier(target["table"])
-        select = mapping.get("select") or f"SELECT {', '.join(identifier(f['source']) for f in fields)} FROM {source_schema}.{source_table}"
-        if not select.lstrip().upper().startswith(("SELECT", "WITH")) or ";" in select:
-            raise ValueError("仅允许单条只读 SELECT")
+        select = mapping.get("select")
+        if select:
+            if not select.lstrip().upper().startswith(("SELECT", "WITH")) or ";" in select:
+                raise ValueError("仅允许单条只读 SELECT")
+        else:
+            source_table = identifier(source["table"])
+            select = f"SELECT {', '.join(identifier(f['source']) for f in fields)} FROM {source_schema}.{source_table}"
         source_conn = self._connect(source)
         target_conn = self._connect(target)
         try:

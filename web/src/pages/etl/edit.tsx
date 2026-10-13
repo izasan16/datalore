@@ -49,6 +49,7 @@ export default function EtlEditPage() {
   const [tgtCols, setTgtCols] = useState<FieldCol[]>([]);
   const [pairs, setPairs] = useState<FieldPair[]>([]);
   const [mapInputType, setMapInputType] = useState('TABLE');
+  const [paramDefs, setParamDefs] = useState<Record<string, string>>({});
   const [mapWriteMode, setMapWriteMode] = useState('APPEND');
   const [mapTargetMode, setMapTargetMode] = useState('CREATE');
   const [schedType, setSchedType] = useState('MANUAL');
@@ -119,6 +120,7 @@ export default function EtlEditPage() {
       upsertKeys,
     });
     setPairs(parseFieldMappings(m.fieldMappingsJson || '[]'));
+    try { setParamDefs(m.inputType === 'SELECT' ? JSON.parse(m.parametersJson || '{}') : {}); } catch { setParamDefs({}); }
     setSrcCols([]);
     setTgtCols([]);
     if (m.targetTableMode === 'CREATE' && m.createTableDdl) {
@@ -215,6 +217,8 @@ export default function EtlEditPage() {
       const result = await runSql(form.getFieldValue('sourceDatasourceId'), probeSql);
       const cols = (result.columns || []).map((name) => ({ name, type: 'text' }));
       setSrcCols(cols);
+      const names = [...new Set([...sql.matchAll(/(?<!:):([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]))];
+      setParamDefs(Object.fromEntries(names.map((n) => [n, paramDefs[n] ?? ''])));
       Message.success(`已解析 ${cols.length} 个字段`);
     } catch (e: any) {
       Message.error(e.response?.data?.message || '字段解析失败');
@@ -290,7 +294,7 @@ export default function EtlEditPage() {
       sourceSchema: values.sourceSchema,
       sourceTable: values.sourceTable,
       selectSql: values.selectSql,
-      parametersJson: '{}',
+      parametersJson: values.inputType === 'SELECT' ? JSON.stringify(paramDefs) : '{}',
       targetSchema: values.targetSchema,
       targetTable: values.targetTable,
       targetTableMode: values.targetTableMode,
@@ -475,6 +479,18 @@ export default function EtlEditPage() {
                     <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder="SELECT id, name FROM orders WHERE city = :city" />
                   </Form.Item>
                   <Button style={{ marginTop: 4 }} onClick={resolveSelectColumns}>解析字段</Button>
+                </div>
+              )}
+              {mapInputType === 'SELECT' && Object.keys(paramDefs).length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>命名参数默认值（手动运行时可覆盖，调度执行用默认值）</Typography.Text>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(Object.keys(paramDefs).length, 4)}, 1fr)`, gap: 12, marginTop: 8 }}>
+                    {Object.entries(paramDefs).map(([name, value]) => (
+                      <Form.Item key={name} label={`参数 ${name}`}>
+                        <Input value={value} placeholder="默认值" onChange={(v) => setParamDefs({ ...paramDefs, [name]: v })} />
+                      </Form.Item>
+                    ))}
+                  </div>
                 </div>
               )}
               {srcCols.length > 0 && (

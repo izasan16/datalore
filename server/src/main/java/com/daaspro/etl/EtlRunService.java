@@ -40,7 +40,7 @@ public class EtlRunService {
     }
 
     @Transactional
-    public EtlRunEntity run(Long taskId, Map<String, Object> parameters) {
+    public EtlRunEntity run(Long taskId, Map<String, Object> overrides) {
         EtlTaskEntity task = etlService.getTask(taskId);
         Long tenant = TenantContext.requireTenantId();
         long active = runMapper.selectCount(new LambdaQueryWrapper<EtlRunEntity>().eq(EtlRunEntity::getTenantId, tenant)
@@ -49,11 +49,14 @@ public class EtlRunService {
         if (task.getTargetTable() == null) throw new BizException(400, "请先完成映射配置后再运行");
         EtlRunEntity run = new EtlRunEntity(); run.setTenantId(tenant); run.setTaskId(taskId); run.setTriggerType("MANUAL");
         run.setStatus("QUEUED"); run.setCurrentAttempt(1); run.setReadRows(0L); run.setWrittenRows(0L); run.setMappingStatsJson("{}");
-        run.setParametersJson(toJson(parameters == null ? Map.of() : parameters)); run.setConfigVersion(task.getConfigVersion()); run.setCreatedAt(LocalDateTime.now());
+        // 任务配置的默认参数 + 本次运行覆盖值，合并后随运行快照保存并传给 Worker
+        Map<String, Object> merged = new LinkedHashMap<>(readMap(task.getParametersJson()));
+        if (overrides != null) merged.putAll(overrides);
+        run.setParametersJson(toJson(merged)); run.setConfigVersion(task.getConfigVersion()); run.setCreatedAt(LocalDateTime.now());
         runMapper.insert(run);
         try {
             String workerId = "run-" + run.getId() + "-" + UUID.randomUUID();
-            Map<String, Object> job = new LinkedHashMap<>(); job.put("workerRunId", workerId); job.put("mappings", List.of(buildMapping(task)));
+            Map<String, Object> job = new LinkedHashMap<>(); job.put("workerRunId", workerId); job.put("mappings", List.of(buildMapping(task, merged)));
             Map<?, ?> response = worker.post().uri("/internal/runs").contentType(MediaType.APPLICATION_JSON)
                     .body(objectMapper.writeValueAsString(job)).retrieve().body(Map.class);
             run.setWorkerRunId(String.valueOf(response.get("workerRunId"))); run.setStatus("RUNNING"); run.setStartedAt(LocalDateTime.now()); runMapper.updateById(run);
@@ -91,10 +94,10 @@ public class EtlRunService {
     public EtlRunEntity retry(Long id) {
         EtlRunEntity old = get(id);
         if (!List.of("FAILED", "CANCELED").contains(old.getStatus())) throw new BizException(400, "仅失败或已取消的运行可以重试");
-        return run(old.getTaskId(), null);
+        return run(old.getTaskId(), readMap(old.getParametersJson()));
     }
 
-    private Map<String, Object> buildMapping(EtlTaskEntity task) {
+    private Map<String, Object> buildMapping(EtlTaskEntity task, Map<String, Object> parameters) {
         DataSourceEntity source = dataSourceService.getOwned(task.getSourceDatasourceId());
         DataSourceEntity target = dataSourceService.getOwned(task.getTargetDatasourceId());
         Map<String, Object> job = new LinkedHashMap<>();
@@ -105,7 +108,7 @@ public class EtlRunService {
         job.put("targetMode", task.getTargetTableMode());
         job.put("upsertKeys", readStrings(task.getUpsertKeysJson()));
         job.put("select", task.getSelectSql());
-        job.put("parameters", readMap(task.getParametersJson()));
+        job.put("parameters", parameters);
         job.put("sourceTable", task.getSourceTable());
         job.put("createDdl", task.getCreateTableDdl());
         Map<String, Object> sourceConfig = (Map<String, Object>) job.get("source");
