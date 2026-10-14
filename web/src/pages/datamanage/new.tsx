@@ -361,7 +361,40 @@ function LocationStep({
       >
         <Row gutter={16}>
           <Col xs={24} sm={12}>
-            {mode === 'new' && (
+            <Form.Item label="导入方式" field="mode">
+              <Select
+                onChange={(v) => setMode(v as 'new' | 'append')}
+                options={[
+                  { value: 'new', label: '新建表' },
+                  { value: 'append', label: '追加到已有表' },
+                ]}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
+              <Select
+                options={dsList}
+                loading={dsLoading}
+                onChange={(v) => {
+                  setWatchDs(v as number);
+                  form.setFieldValue('existingTable', undefined);
+                }}
+              />
+            </Form.Item>
+            {dsError && (
+              <div className="page-error" role="alert" style={{ marginTop: -12, padding: '8px 12px', textAlign: 'left' }}>
+                <Typography.Text>数据源加载失败，请重试。</Typography.Text>
+                <Button size="mini" type="text" loading={dsLoading} onClick={() => undefined}>
+                  重试
+                </Button>
+              </div>
+            )}
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={12}>
+            {mode === 'new' ? (
               <Form.Item
                 label="表名"
                 field="name"
@@ -373,17 +406,7 @@ function LocationStep({
               >
                 <Input placeholder="如：sales_detail" />
               </Form.Item>
-            )}
-            <Form.Item label="导入方式" field="mode">
-              <Select
-                onChange={(v) => setMode(v as 'new' | 'append')}
-                options={[
-                  { value: 'new', label: '新建表' },
-                  { value: 'append', label: '追加到已有表' },
-                ]}
-              />
-            </Form.Item>
-            {mode === 'append' && (
+            ) : (
               <>
                 <Form.Item
                   label="目标表"
@@ -405,16 +428,6 @@ function LocationStep({
             )}
           </Col>
           <Col xs={24} sm={12}>
-            <Form.Item label="导入到数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
-              <Select
-                options={dsList}
-                loading={dsLoading}
-                onChange={(v) => {
-                  setWatchDs(v as number);
-                  form.setFieldValue('existingTable', undefined);
-                }}
-              />
-            </Form.Item>
             <Form.Item label="Schema" field="schemaName" extra="不选则使用数据源默认 schema">
               <Select
                 options={schemas}
@@ -437,14 +450,6 @@ function LocationStep({
                 }}
               />
             </Form.Item>
-            {dsError && (
-              <div className="page-error" role="alert" style={{ marginTop: -12, padding: '8px 12px', textAlign: 'left' }}>
-                <Typography.Text>数据源加载失败，请重试。</Typography.Text>
-                <Button size="mini" type="text" loading={dsLoading} onClick={() => undefined}>
-                  重试
-                </Button>
-              </div>
-            )}
           </Col>
         </Row>
         <Space style={{ marginTop: 8 }}>
