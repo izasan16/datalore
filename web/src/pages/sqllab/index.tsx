@@ -25,6 +25,10 @@ export default function SqlLabPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState('');
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
   const runRef = useRef<() => void>(() => {});
   const saveRef = useRef<() => void>(() => {});
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
@@ -99,25 +103,51 @@ export default function SqlLabPage() {
 
   async function save() {
     const n = name.trim();
-    if (!n) {
-      Message.warning('请先填写脚本名称');
+    if (currentId == null) {
+      // 新脚本：保存时命名（数据库客户端习惯）
+      setSaveName(n);
+      setSaveDialogOpen(true);
       return;
     }
+    await doSave(n, currentId);
+  }
+  saveRef.current = save;
+
+  async function doSave(n: string, id: number | null) {
     try {
-      if (currentId == null) {
+      if (id == null) {
         const r = await createScript(n, content);
         setCurrentId(r.id);
       } else {
-        await updateScript(currentId, n, content);
+        await updateScript(id, n, content);
       }
       setBaseline({ name: n, content });
+      setName(n);
       Message.success('已保存');
       reloadScripts();
     } catch (e: any) {
       Message.error(e.response?.data?.message || '保存失败');
     }
   }
-  saveRef.current = save;
+
+  function commitRename(s: SqlScriptInfo) {
+    const n = renameValue.trim();
+    setRenamingId(null);
+    if (!n || n === s.name) return;
+    if (s.id === currentId) {
+      // 当前脚本：改名进脏状态，由用户保存
+      setName(n);
+      return;
+    }
+    // 其他脚本：直接重命名（内容不变）
+    getScript(s.id)
+      .then((d) => updateScript(s.id, n, d.content))
+      .then(() => {
+        Message.success('已重命名');
+        reloadScripts();
+      })
+      .catch((e: any) => Message.error(e.response?.data?.message || '重命名失败'));
+  }
 
   /** 有未保存修改时先确认，再执行切换动作 */
   function guardUnsaved(action: () => void) {
@@ -235,20 +265,38 @@ export default function SqlLabPage() {
                   background: selected ? 'var(--color-primary-light-1)' : undefined,
                 }}
                 onClick={() => openScript(s)}
+                onDoubleClick={(e) => { e.stopPropagation(); setRenamingId(s.id); setRenameValue(s.name); }}
+                title="双击重命名"
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span
-                    style={{
-                      flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      color: selected ? 'var(--daaspro-primary)' : undefined,
-                      fontWeight: selected ? 600 : 400,
-                    }}
-                  >
-                    {s.name}
-                    {selected && dirty && (
-                      <span style={{ color: 'rgb(var(--orange-6))', marginLeft: 4 }} title="有未保存的修改">●</span>
-                    )}
-                  </span>
+                  {renamingId === s.id ? (
+                    <Input
+                      size="mini"
+                      value={renameValue}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(v) => setRenameValue(v)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitRename(s);
+                        if (e.key === 'Escape') setRenamingId(null);
+                      }}
+                      onBlur={() => commitRename(s)}
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                  ) : (
+                    <span
+                      style={{
+                        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        color: selected ? 'var(--daaspro-primary)' : undefined,
+                        fontWeight: selected ? 600 : 400,
+                      }}
+                    >
+                      {s.name}
+                      {selected && dirty && (
+                        <span style={{ color: 'rgb(var(--orange-6))', marginLeft: 4 }} title="有未保存的修改">●</span>
+                      )}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="script-item-del"
@@ -271,13 +319,9 @@ export default function SqlLabPage() {
 
       <Card className="card-fill" style={{ flex: 1, minWidth: 0 }} bodyStyle={{ padding: 12 }}>
         <Space style={{ marginBottom: 10, flexShrink: 0 }} wrap>
-          <Input
-            value={name}
-            onChange={setName}
-            placeholder="脚本名称"
-            style={{ width: 220 }}
-            status={dirty && !name.trim() ? 'warning' : undefined}
-          />
+          <Typography.Text style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+            {name.trim() || '未命名查询'}
+          </Typography.Text>
           <Select
             style={{ width: 200 }}
             value={datasourceId}
@@ -387,6 +431,36 @@ export default function SqlLabPage() {
           )}
         </div>
       </Card>
+
+      <Modal
+        title="保存脚本"
+        visible={saveDialogOpen}
+        onCancel={() => setSaveDialogOpen(false)}
+        onOk={async () => {
+          const n = saveName.trim();
+          if (!n) {
+            Message.warning('请输入脚本名称');
+            return;
+          }
+          setSaveDialogOpen(false);
+          await doSave(n, currentId);
+        }}
+        okText="保存"
+      >
+        <Input
+          value={saveName}
+          placeholder="脚本名称"
+          onChange={(v) => setSaveName(v)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const n = saveName.trim();
+              if (!n) { Message.warning('请输入脚本名称'); return; }
+              setSaveDialogOpen(false);
+              doSave(n, currentId);
+            }
+          }}
+        />
+      </Modal>
     </div>
   );
 }

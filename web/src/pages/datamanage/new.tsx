@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Button, Form, Grid, Input, Message, Select, Space, Steps, Table, Tag, Typography, Upload,
 } from '@arco-design/web-react';
 import { IconArrowRise, IconUpload } from '@arco-design/web-react/icon';
-import { ColumnDef, confirmDataset, uploadDataset } from '../../api/dataset';
-import { listDatasources, listTables } from '../../api/datasource';
+import { confirmImported, uploadImported } from '../../api/imported';
+import { ColumnInfo, listDatasources, listSchemas, listTables } from '../../api/datasource';
 
 const { Row, Col } = Grid;
 
@@ -17,12 +17,12 @@ const TYPE_COLOR: Record<string, string> = {
 interface ParseResult {
   uploadId: string;
   fileName: string;
-  columns: ColumnDef[];
+  columns: ColumnInfo[];
   previewRows: string[][];
   rowCount: number;
 }
 
-export default function DatasetNewPage() {
+export default function DataManageNewPage() {
   const nav = useNavigate();
   const [step, setStep] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -38,7 +38,7 @@ export default function DatasetNewPage() {
     setFileRef(f);
     setUploading(true);
     try {
-      const r = await uploadDataset(f);
+      const r = await uploadImported(f);
       setResult({
         uploadId: r.uploadId,
         fileName: r.fileName,
@@ -58,13 +58,14 @@ export default function DatasetNewPage() {
     if (!result) return;
     setImporting(true);
     try {
-      await confirmDataset({
+      await confirmImported({
         uploadId: result.uploadId,
         name: String(v.name || '').trim(),
         fileName: result.fileName,
         columns: result.columns.map((c) => c.name),
         types: result.columns.map((c) => c.type),
         datasourceId: v.datasourceId,
+        schemaName: v.schemaName || undefined,
         existingTable: v.mode === 'append' ? v.existingTable : undefined,
       });
       Message.success('导入成功');
@@ -81,10 +82,10 @@ export default function DatasetNewPage() {
       <div className="page-header">
         <div className="page-header-main">
           <Typography.Title heading={4} style={{ margin: 0 }}>
-            上传数据
+            导入数据
           </Typography.Title>
           <Typography.Text type="secondary">
-            上传文件并选择数据源，将数据导入为可管理的数据集
+            上传文件并选择入库位置，导入为数据源中的表
           </Typography.Text>
         </div>
         <div className="page-header-actions">
@@ -149,7 +150,7 @@ function ImportForm({
   result: ParseResult;
   importing: boolean;
   defaultName: string;
-  onConfirm: (v: { name: string; datasourceId: number; existingTable?: string }) => void;
+  onConfirm: (v: { name: string; datasourceId: number; schemaName?: string; existingTable?: string }) => void;
   onReset: () => void;
 }) {
   const [form] = Form.useForm();
@@ -161,6 +162,10 @@ function ImportForm({
   const [tableError, setTableError] = useState(false);
   const [mode, setMode] = useState<'new' | 'append'>('new');
   const [watchDs, setWatchDs] = useState<number>();
+  const [schemaOptions, setSchemaOptions] = useState<{ value: string; label: string }[]>([]);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const location = useLocation();
+  const prefill = (location.state || {}) as { datasourceId?: number; schemaName?: string };
 
   const loadDatasources = useCallback(async () => {
     setDatasourceLoading(true);
@@ -183,7 +188,7 @@ function ImportForm({
     setTableLoading(true);
     setTableError(false);
     try {
-      const tables = await listTables(datasourceId);
+      const tables = await listTables(datasourceId, form.getFieldValue('schemaName'));
       setTableOptions(tables.map((t) => ({ value: t.name, label: t.name })));
     } catch (e: any) {
       setTableOptions([]);
@@ -196,7 +201,28 @@ function ImportForm({
 
   useEffect(() => {
     loadDatasources();
+    if (prefill.datasourceId) {
+      form.setFieldValue('datasourceId', prefill.datasourceId);
+      setWatchDs(prefill.datasourceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadDatasources]);
+
+  useEffect(() => {
+    if (!watchDs) {
+      setSchemaOptions([]);
+      return;
+    }
+    setSchemaLoading(true);
+    listSchemas(watchDs)
+      .then((list) => {
+        setSchemaOptions(list.map((s) => ({ value: s.name, label: s.name })));
+        if (prefill.schemaName) form.setFieldValue('schemaName', prefill.schemaName);
+      })
+      .catch(() => setSchemaOptions([]))
+      .finally(() => setSchemaLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchDs]);
 
   useEffect(() => {
     if (!watchDs) {
@@ -247,10 +273,10 @@ function ImportForm({
         <Row gutter={16}>
           <Col xs={24} sm={12}>
             <Form.Item
-              label="数据名称"
+              label="名称"
               field="name"
               rules={mode === 'append' ? [] : [{ required: true, message: '请输入名称' }]}
-              extra={mode === 'append' ? '追加到已有数据集，将更新其行数，无需新名称' : undefined}
+              extra={mode === 'append' ? '追加到已有导入表，将更新其行数，无需新名称' : undefined}
             >
               <Input placeholder="如：销售明细" disabled={mode === 'append'} />
             </Form.Item>
@@ -263,6 +289,19 @@ function ImportForm({
                 onChange={(v) => {
                   setWatchDs(v as number);
                   form.setFieldValue('existingTable', undefined);
+                }}
+              />
+            </Form.Item>
+            <Form.Item label="Schema" field="schemaName" extra="不选则使用数据源默认 schema">
+              <Select
+                options={schemaOptions}
+                loading={schemaLoading}
+                placeholder="默认 schema"
+                showSearch
+                allowClear
+                onChange={() => {
+                  form.setFieldValue('existingTable', undefined);
+                  if (watchDs) loadTables(watchDs);
                 }}
               />
             </Form.Item>

@@ -9,8 +9,6 @@ import com.daaspro.apipub.mapper.ApiGrantMapper;
 import com.daaspro.apipub.mapper.ApiPubMapper;
 import com.daaspro.common.exception.BizException;
 import com.daaspro.common.security.AesGcmCipher;
-import com.daaspro.dataset.entity.DatasetEntity;
-import com.daaspro.dataset.mapper.DatasetMapper;
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.mapper.DataSourceMapper;
 import com.daaspro.datasource.service.ConnectionManager;
@@ -46,19 +44,17 @@ public class OpenApiService {
     private final ApiPubMapper pubMapper;
     private final ApiAppMapper appMapper;
     private final ApiGrantMapper grantMapper;
-    private final DatasetMapper datasetMapper;
     private final DataSourceMapper dsMapper;
     private final ConnectionManager connectionManager;
     private final AesGcmCipher cipher;
     private final ApiPubService pubService;
 
     public OpenApiService(ApiPubMapper pubMapper, ApiAppMapper appMapper, ApiGrantMapper grantMapper,
-                          DatasetMapper datasetMapper, DataSourceMapper dsMapper,
+                          DataSourceMapper dsMapper,
                           ConnectionManager connectionManager, AesGcmCipher cipher, ApiPubService pubService) {
         this.pubMapper = pubMapper;
         this.appMapper = appMapper;
         this.grantMapper = grantMapper;
-        this.datasetMapper = datasetMapper;
         this.dsMapper = dsMapper;
         this.connectionManager = connectionManager;
         this.cipher = cipher;
@@ -100,7 +96,7 @@ public class OpenApiService {
         return app;
     }
 
-    /** 解析 path → 启用的 API + 数据集 + 内置源；未授权/不存在/停用 → 404。 */
+    /** 解析 path → 启用的 API + 数据源；未授权/不存在/停用 → 404。 */
     public Resolved resolve(String path, ApiAppEntity app) {
         ApiPubEntity api = pubMapper.selectOne(new LambdaQueryWrapper<ApiPubEntity>()
                 .eq(ApiPubEntity::getPath, path));
@@ -115,15 +111,14 @@ public class OpenApiService {
                 .eq(ApiGrantEntity::getApiId, api.getId())
                 .eq(ApiGrantEntity::getAppId, app.getId()));
         if (granted == 0) throw new OpenApiException(404, "该应用未被授权调用此 API");
-        DatasetEntity dataset = datasetMapper.selectById(api.getDatasetId());
-        DataSourceEntity ds = dataset == null ? null : dsMapper.selectById(dataset.getDatasourceId());
-        if (dataset == null || ds == null) {
-            throw new OpenApiException(404, "API 配置异常：数据集或数据源缺失");
+        DataSourceEntity ds = api.getDatasourceId() == null ? null : dsMapper.selectById(api.getDatasourceId());
+        if (ds == null) {
+            throw new OpenApiException(404, "API 配置异常：数据源缺失");
         }
-        return new Resolved(api, dataset, ds);
+        return new Resolved(api, ds);
     }
 
-    public record Resolved(ApiPubEntity api, DatasetEntity dataset, DataSourceEntity datasource) {}
+    public record Resolved(ApiPubEntity api, DataSourceEntity datasource) {}
 
     /** 执行查询。queryParams 为 URL 上除 page/size/order_by/order 外的参数。 */
     public OpenResult query(Resolved r, Map<String, String> queryParams, String pageStr, String sizeStr,
@@ -146,7 +141,10 @@ public class OpenApiService {
         }
 
         String cols = exposed.stream().map(c -> quote(c)).collect(Collectors.joining(", "));
-        String table = quote(r.dataset().getTableName());
+        String schema = r.api().getSchemaName();
+        String table = schema == null || schema.isBlank()
+                ? quote(r.api().getTableName())
+                : quote(schema) + "." + quote(r.api().getTableName());
         StringBuilder where = new StringBuilder();
         List<String> bind = new ArrayList<>();
         if (!effective.isEmpty()) {
@@ -184,7 +182,7 @@ public class OpenApiService {
                 try (ResultSet rs = st.executeQuery()) {
                     ResultSetMetaData md = rs.getMetaData();
                     int n = md.getColumnCount();
-                    // 列名以数据集定义顺序为准（PG 返回小写标签）
+                    // 列名以发布配置顺序为准（PG 返回小写标签）
                     while (rs.next()) {
                         List<String> row = new ArrayList<>(n);
                         for (int i = 1; i <= n; i++) row.add(rs.getString(i));

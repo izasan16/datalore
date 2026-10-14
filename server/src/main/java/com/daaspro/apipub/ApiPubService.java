@@ -8,8 +8,8 @@ import com.daaspro.apipub.mapper.ApiAppMapper;
 import com.daaspro.apipub.mapper.ApiGrantMapper;
 import com.daaspro.apipub.mapper.ApiPubMapper;
 import com.daaspro.common.exception.BizException;
-import com.daaspro.dataset.entity.DatasetEntity;
-import com.daaspro.dataset.mapper.DatasetMapper;
+import com.daaspro.datasource.entity.DataSourceEntity;
+import com.daaspro.datasource.service.DataSourceService;
 import com.daaspro.tenant.context.TenantContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * API 发布管理：数据集(表) → 只读 REST API。
+ * API 发布管理：数据源表 → 只读 REST API。
  * MVP 只支持等值过滤查询；自定义 SQL 发布、字段脱敏、限流为后续迭代。
  */
 @Service
@@ -35,18 +35,19 @@ public class ApiPubService {
     private final ApiPubMapper mapper;
     private final ApiAppMapper appMapper;
     private final ApiGrantMapper grantMapper;
-    private final DatasetMapper datasetMapper;
+    private final DataSourceService dataSourceService;
     private final ObjectMapper om = new ObjectMapper();
 
     public ApiPubService(ApiPubMapper mapper, ApiAppMapper appMapper, ApiGrantMapper grantMapper,
-                         DatasetMapper datasetMapper) {
+                         DataSourceService dataSourceService) {
         this.mapper = mapper;
         this.appMapper = appMapper;
         this.grantMapper = grantMapper;
-        this.datasetMapper = datasetMapper;
+        this.dataSourceService = dataSourceService;
     }
 
-    public record CreateReq(String name, String path, Long datasetId, List<String> columns,
+    public record CreateReq(String name, String path, Long datasourceId, String schemaName, String tableName,
+                            List<String> columns,
                             List<String> filterColumns, Integer maxRows) {}
 
     public record UpdateReq(String name, List<String> columns, List<String> filterColumns,
@@ -62,11 +63,10 @@ public class ApiPubService {
                 .eq(ApiPubEntity::getPath, req.path()));
         if (pathDup > 0) throw new BizException(400, "路径已被占用（全平台唯一），请换一个");
 
-        DatasetEntity dataset = getDatasetOwned(req.datasetId());
-        Set<String> datasetCols = parseColumns(dataset.getColumnsDef()).stream()
-                .map(c -> c.get("name")).collect(Collectors.toSet());
+        DataSourceEntity ds = dataSourceService.getOwned(req.datasourceId());
+        Set<String> tableCols = liveColumnNames(ds, req.schemaName(), req.tableName());
         for (String col : req.columns()) {
-            if (!datasetCols.contains(col)) throw new BizException(400, "列不属于该数据集: " + col);
+            if (!tableCols.contains(col)) throw new BizException(400, "列不属于该表: " + col);
         }
         List<String> filters = req.filterColumns() == null ? List.of() : req.filterColumns();
         Set<String> exposed = Set.copyOf(req.columns());
@@ -79,7 +79,9 @@ public class ApiPubService {
         api.setTenantId(TenantContext.requireTenantId());
         api.setName(req.name().trim());
         api.setPath(req.path());
-        api.setDatasetId(dataset.getId());
+        api.setDatasourceId(ds.getId());
+        api.setSchemaName(req.schemaName() == null || req.schemaName().isBlank() ? null : req.schemaName().trim());
+        api.setTableName(req.tableName().trim());
         api.setColumns(toJson(req.columns()));
         api.setFilterColumns(toJson(filters));
         api.setMaxRows(maxRows);
@@ -92,13 +94,12 @@ public class ApiPubService {
 
     public ApiPubEntity update(Long id, UpdateReq req) {
         ApiPubEntity api = getOwned(id);
-        DatasetEntity dataset = getDatasetOwned(api.getDatasetId());
-        Set<String> datasetCols = parseColumns(dataset.getColumnsDef()).stream()
-                .map(c -> c.get("name")).collect(Collectors.toSet());
+        DataSourceEntity ds = dataSourceService.getOwned(api.getDatasourceId());
+        Set<String> tableCols = liveColumnNames(ds, api.getSchemaName(), api.getTableName());
         if (req.name() != null && !req.name().isBlank()) api.setName(req.name().trim());
         if (req.columns() != null && !req.columns().isEmpty()) {
             for (String col : req.columns()) {
-                if (!datasetCols.contains(col)) throw new BizException(400, "列不属于该数据集: " + col);
+                if (!tableCols.contains(col)) throw new BizException(400, "列不属于该表: " + col);
             }
             api.setColumns(toJson(req.columns()));
         }
@@ -136,12 +137,11 @@ public class ApiPubService {
         return api;
     }
 
-    public DatasetEntity getDatasetOwned(Long datasetId) {
-        DatasetEntity d = datasetMapper.selectById(datasetId);
-        if (d == null || !d.getTenantId().equals(TenantContext.requireTenantId())) {
-            throw new BizException(404, "数据集不存在");
-        }
-        return d;
+    /** 目标表实时列名集合（列结构以数据库为准，不再依赖导入记录）。 */
+    public Set<String> liveColumnNames(DataSourceEntity ds, String schema, String table) {
+        if (table == null || table.isBlank()) throw new BizException(400, "请选择要发布的表");
+        return dataSourceService.listColumns(ds.getId(), table, schema).stream()
+                .map(c -> c.get("name")).collect(Collectors.toSet());
     }
 
     /** 设置某 API 的授权应用集合（全量替换），应用必须属于当前租户 */
@@ -182,7 +182,7 @@ public class ApiPubService {
         try {
             return om.readValue(columnsDef, new TypeReference<List<Map<String, String>>>() {});
         } catch (Exception e) {
-            throw new BizException(500, "数据集列定义损坏");
+            throw new BizException(500, "列配置损坏");
         }
     }
 

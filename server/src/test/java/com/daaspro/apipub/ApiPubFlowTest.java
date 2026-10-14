@@ -3,8 +3,6 @@ package com.daaspro.apipub;
 import com.daaspro.apipub.entity.ApiAppEntity;
 import com.daaspro.apipub.entity.ApiPubEntity;
 import com.daaspro.common.exception.BizException;
-import com.daaspro.dataset.entity.DatasetEntity;
-import com.daaspro.dataset.mapper.DatasetMapper;
 import com.daaspro.datasource.service.DataSourceService;
 import com.daaspro.sqllab.SqlGatewayService;
 import com.daaspro.tenant.context.TenantContext;
@@ -32,10 +30,11 @@ class ApiPubFlowTest {
     @Autowired SqlGatewayService gateway;
     @Autowired TenantService tenantService;
     @Autowired DataSourceService dataSourceService;
-    @Autowired DatasetMapper datasetMapper;
 
-    /** 建租户 + 内置源上造一张 3 行表 + 注册为数据集。返回 datasetId。 */
-    private long setupTenantWithDataset(String tag) {
+    /** 建租户 + 外部源上造一张 3 行表。返回数据源与表名。 */
+    private record Setup(long datasourceId, String table) {}
+
+    private Setup setupTenantWithTable(String tag) {
         String slug = tag + (System.nanoTime() % 100000000);
         long tid = tenantService.getTenantIdBySlug(
                 tenantService.registerAutoSlug("API租户" + slug, "adm" + slug, "password123"));
@@ -46,27 +45,18 @@ class ApiPubFlowTest {
         gateway.run(String.valueOf(source.getId()), "CREATE TABLE " + table + "(id bigint, name text, city text)");
         gateway.run(String.valueOf(source.getId()),
                 "INSERT INTO " + table + " VALUES (1,'Ann','SH'),(2,'Bob','BJ'),(3,'Cid','SH')");
-        DatasetEntity ds = new DatasetEntity();
-        ds.setTenantId(tid);
-        ds.setName("城市数据" + slug);
-        ds.setTableName(table);
-        ds.setDatasourceId(source.getId());
-        ds.setColumnsDef("[{\"name\":\"id\",\"type\":\"bigint\"},{\"name\":\"name\",\"type\":\"text\"},{\"name\":\"city\",\"type\":\"text\"}]");
-        ds.setRowCount(3L);
-        ds.setFileName("test.csv");
-        datasetMapper.insert(ds);
-        return ds.getId();
+        return new Setup(source.getId(), table);
     }
 
-    private ApiPubEntity publish(long datasetId, String path) {
-        return pubService.create(new ApiPubService.CreateReq("城市API", path, datasetId,
+    private ApiPubEntity publish(Setup s, String path) {
+        return pubService.create(new ApiPubService.CreateReq("城市API", path, s.datasourceId(), "public", s.table(),
                 List.of("id", "name", "city"), List.of("city"), 100));
     }
 
     @Test
     void fullFlowPublishGrantInvoke() {
-        long datasetId = setupTenantWithDataset("ap");
-        var api = publish(datasetId, "city-" + System.nanoTime() % 100000);
+        var setup = setupTenantWithTable("ap");
+        var api = publish(setup, "city-" + System.nanoTime() % 100000);
         var app = appService.create("调用方A");
 
         pubService.setGrants(api.getId(), List.of(app.id()));
@@ -81,8 +71,8 @@ class ApiPubFlowTest {
 
     @Test
     void unknownParamRejected() {
-        long datasetId = setupTenantWithDataset("au");
-        var api = publish(datasetId, "unk-" + System.nanoTime() % 100000);
+        var setup = setupTenantWithTable("au");
+        var api = publish(setup, "unk-" + System.nanoTime() % 100000);
         var app = appService.create("调用方U");
         pubService.setGrants(api.getId(), List.of(app.id()));
         var resolved = openApiService.resolve(api.getPath(), reopen(app));
@@ -93,8 +83,8 @@ class ApiPubFlowTest {
 
     @Test
     void authAndGrantErrors() {
-        long datasetId = setupTenantWithDataset("ae");
-        var api = publish(datasetId, "auth-" + System.nanoTime() % 100000);
+        var setup = setupTenantWithTable("ae");
+        var api = publish(setup, "auth-" + System.nanoTime() % 100000);
         var app = appService.create("调用方E");
 
         // 错 secret → 401
@@ -119,32 +109,32 @@ class ApiPubFlowTest {
 
     @Test
     void pathGloballyUniqueAcrossTenants() {
-        long datasetA = setupTenantWithDataset("pa");
+        var setupA = setupTenantWithTable("pa");
         String shared = "shared-" + System.nanoTime() % 100000;
-        publish(datasetA, shared);
+        publish(setupA, shared);
 
-        long datasetB = setupTenantWithDataset("pb");
-        assertThatThrownBy(() -> publish(datasetB, shared))
+        var setupB = setupTenantWithTable("pb");
+        assertThatThrownBy(() -> publish(setupB, shared))
                 .isInstanceOf(BizException.class).hasMessageContaining("路径已被占用");
     }
 
     @Test
     void validationAndCrossTenantGuards() {
-        long datasetId = setupTenantWithDataset("av");
+        var setup = setupTenantWithTable("av");
         // 非法 path
         assertThatThrownBy(() -> pubService.create(new ApiPubService.CreateReq(
-                "x", "Bad Path!", datasetId, List.of("id"), List.of(), null)))
+                "x", "Bad Path!", setup.datasourceId(), "public", setup.table(), List.of("id"), List.of(), null)))
                 .isInstanceOf(BizException.class).hasMessageContaining("路径");
         // 过滤列必须是暴露列
         assertThatThrownBy(() -> pubService.create(new ApiPubService.CreateReq(
-                "x", "ok-" + System.nanoTime() % 100000, datasetId, List.of("id"), List.of("city"), null)))
+                "x", "ok-" + System.nanoTime() % 100000, setup.datasourceId(), "public", setup.table(), List.of("id"), List.of("city"), null)))
                 .isInstanceOf(BizException.class).hasMessageContaining("暴露列");
-        // 列不属于数据集
+        // 列不属于目标表
         assertThatThrownBy(() -> pubService.create(new ApiPubService.CreateReq(
-                "x", "ok2-" + System.nanoTime() % 100000, datasetId, List.of("ghost"), List.of(), null)))
+                "x", "ok2-" + System.nanoTime() % 100000, setup.datasourceId(), "public", setup.table(), List.of("ghost"), List.of(), null)))
                 .isInstanceOf(BizException.class).hasMessageContaining("不属于");
 
-        var api = publish(datasetId, "guard-" + System.nanoTime() % 100000);
+        var api = publish(setup, "guard-" + System.nanoTime() % 100000);
 
         // 切到另一租户：跨租户不可见
         String slugB = "xb" + (System.nanoTime() % 100000000);
@@ -159,9 +149,9 @@ class ApiPubFlowTest {
 
     @Test
     void sizeAndOrderLimits() {
-        long datasetId = setupTenantWithDataset("as");
+        var setup = setupTenantWithTable("as");
         var api = pubService.create(new ApiPubService.CreateReq(
-                "限流API", "lim-" + System.nanoTime() % 100000, datasetId,
+                "限流API", "lim-" + System.nanoTime() % 100000, setup.datasourceId(), "public", setup.table(),
                 List.of("id", "name"), List.of(), 2));
         var app = appService.create("调用方L");
         pubService.setGrants(api.getId(), List.of(app.id()));

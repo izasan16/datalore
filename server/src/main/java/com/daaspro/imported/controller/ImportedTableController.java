@@ -1,6 +1,6 @@
-package com.daaspro.dataset.controller;
+package com.daaspro.imported.controller;
 
-import com.daaspro.dataset.service.DatasetService;
+import com.daaspro.imported.service.ImportedTableService;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -10,30 +10,30 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/datasets")
+@RequestMapping("/api/imported-tables")
 @Validated
-public class DatasetController {
+public class ImportedTableController {
 
-    private final DatasetService service;
+    private final ImportedTableService service;
 
-    public DatasetController(DatasetService service) {
+    public ImportedTableController(ImportedTableService service) {
         this.service = service;
     }
 
     @PostMapping("/upload")
-    public DatasetService.UploadResult upload(@RequestParam("file") MultipartFile file) {
+    public ImportedTableService.UploadResult upload(@RequestParam("file") MultipartFile file) {
         return service.upload(file);
     }
 
     public record ConfirmReq(@NotBlank String uploadId, @NotBlank String name,
                              String fileName, List<String> columns, List<String> types,
-                             Long datasourceId, String existingTable) {}
+                             Long datasourceId, String schemaName, String existingTable) {}
 
     @PostMapping("/confirm")
     public Map<String, Object> confirm(@RequestBody ConfirmReq req) {
-        var d = service.confirm(new DatasetService.ConfirmReq(
+        var d = service.confirm(new ImportedTableService.ConfirmReq(
                 req.uploadId(), req.name(), req.fileName(), req.columns(), req.types(),
-                req.datasourceId(), req.existingTable()));
+                req.datasourceId(), req.schemaName(), req.existingTable()));
         return Map.of("id", d.getId(), "tableName", d.getTableName(), "rowCount", d.getRowCount());
     }
 
@@ -43,7 +43,7 @@ public class DatasetController {
     }
 
     @GetMapping("/{id}/preview")
-    public DatasetService.Preview preview(@PathVariable Long id) {
+    public ImportedTableService.Preview preview(@PathVariable Long id) {
         return service.preview(id);
     }
 

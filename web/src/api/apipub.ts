@@ -4,8 +4,10 @@ export interface ApiPubInfo {
   id: number;
   name: string;
   path: string;
-  datasetId: number;
-  datasetName: string;
+  datasourceId: number;
+  datasourceName: string;
+  schemaName: string;
+  tableName: string;
   columns: string[];
   filterColumns: string[];
   maxRows: number;
@@ -36,7 +38,7 @@ export function getApi(id: number) {
 }
 
 export function createApi(payload: {
-  name: string; path: string; datasetId: number; columns: string[];
+  name: string; path: string; datasourceId: number; schemaName?: string; tableName: string; columns: string[];
   filterColumns: string[]; maxRows?: number;
 }) {
   return http.post<ApiPubInfo>('/apipubs', payload).then((r) => r.data);
@@ -59,10 +61,6 @@ export function getApiGrants(id: number) {
 
 export function setApiGrants(id: number, appIds: number[]) {
   return http.put(`/apipubs/${id}/grants`, { appIds }).then((r) => r.data);
-}
-
-export function datasetColumns(datasetId: number) {
-  return http.get<ColumnDef[]>('/apipubs/dataset-columns', { params: { datasetId } }).then((r) => r.data);
 }
 
 export function listApps() {

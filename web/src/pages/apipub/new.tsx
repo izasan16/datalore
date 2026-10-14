@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button, Card, Checkbox, Form, Grid, Input, InputNumber, Message, Select, Space, Typography,
 } from '@arco-design/web-react';
-import { ApiPubInfo, ColumnDef, createApi, datasetColumns } from '../../api/apipub';
-import { DatasetInfo, listDatasets } from '../../api/dataset';
+import { ApiPubInfo, ColumnDef, createApi } from '../../api/apipub';
+import { ColumnInfo, listColumns, listDatasources, listSchemas, listTables } from '../../api/datasource';
 
 const { Row, Col } = Grid;
 const CheckboxGroup = Checkbox.Group;
@@ -38,35 +38,83 @@ function BoundedCheckboxGroup({
 export default function ApiPubNewPage() {
   const nav = useNavigate();
   const [form] = Form.useForm();
-  const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
+  const [dsList, setDsList] = useState<{ id: number; name: string; type: string }[]>([]);
+  const [schemaOptions, setSchemaOptions] = useState<{ value: string; label: string }[]>([]);
+  const [tableOptions, setTableOptions] = useState<{ value: string; label: string }[]>([]);
   const [cols, setCols] = useState<ColumnDef[]>([]);
   const [saving, setSaving] = useState(false);
-  const [datasetsLoading, setDatasetsLoading] = useState(false);
-  const [datasetsError, setDatasetsError] = useState(false);
+  const [dsLoading, setDsLoading] = useState(false);
+  const [dsError, setDsError] = useState(false);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [watchDs, setWatchDs] = useState<number>();
+  const [, setWatchTable] = useState<string>();
 
-  const loadDatasets = useCallback(async () => {
-    setDatasetsLoading(true);
-    setDatasetsError(false);
+  const loadDatasources = useCallback(async () => {
+    setDsLoading(true);
+    setDsError(false);
     try {
-      setDatasets(await listDatasets());
+      const list = await listDatasources();
+      setDsList(list.map((d) => ({ id: d.id, name: d.name, type: d.type })));
     } catch {
-      setDatasetsError(true);
+      setDsError(true);
     } finally {
-      setDatasetsLoading(false);
+      setDsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadDatasets();
-  }, [loadDatasets]);
+    loadDatasources();
+  }, [loadDatasources]);
 
-  async function onDatasetChange(id: number) {
+  async function onDatasourceChange(id: number) {
+    setWatchDs(id);
+    setWatchTable(undefined);
+    setSchemaOptions([]);
+    setTableOptions([]);
+    form.setFieldValue('columns', []);
+    form.setFieldValue('filterColumns', []);
+    form.setFieldValue('tableName', undefined);
+    setCols([]);
+    if (!id) return;
+    setSchemaLoading(true);
+    try {
+      setSchemaOptions((await listSchemas(id)).map((s) => ({ value: s.name, label: s.name })));
+    } catch {
+      setSchemaOptions([]);
+    } finally {
+      setSchemaLoading(false);
+    }
+  }
+
+  async function onSchemaChange(schema?: string) {
+    setWatchTable(undefined);
+    setTableOptions([]);
+    form.setFieldValue('tableName', undefined);
     form.setFieldValue('columns', []);
     form.setFieldValue('filterColumns', []);
     setCols([]);
+    if (!watchDs) return;
+    setTableLoading(true);
     try {
-      const c = await datasetColumns(id);
-      setCols(c);
+      setTableOptions((await listTables(watchDs, schema)).map((t) => ({ value: t.name, label: t.name })));
+    } catch {
+      setTableOptions([]);
+    } finally {
+      setTableLoading(false);
+    }
+  }
+
+  async function onTableChange(table: string) {
+    setWatchTable(table);
+    form.setFieldValue('columns', []);
+    form.setFieldValue('filterColumns', []);
+    setCols([]);
+    if (!watchDs || !table) return;
+    try {
+      const schema = form.getFieldValue('schemaName');
+      const c: ColumnInfo[] = await listColumns(watchDs, table, schema || undefined);
+      setCols(c.map((x) => ({ name: x.name, type: x.type })));
       // 默认全部暴露
       form.setFieldValue('columns', c.map((x) => x.name));
     } catch (e: any) {
@@ -89,7 +137,9 @@ export default function ApiPubNewPage() {
       const api: ApiPubInfo = await createApi({
         name: v.name,
         path: v.path,
-        datasetId: v.datasetId,
+        datasourceId: v.datasourceId,
+        schemaName: v.schemaName || undefined,
+        tableName: v.tableName,
         columns: v.columns,
         filterColumns: v.filterColumns || [],
         maxRows: v.maxRows || undefined,
@@ -146,23 +196,49 @@ export default function ApiPubNewPage() {
             </Form.Item>
           </Col>
         </Row>
-        {datasetsError && (
+        {dsError && (
           <div className="page-error" role="alert" style={{ marginBottom: 16 }}>
-            <Typography.Text>数据集加载失败，请重试。</Typography.Text>
+            <Typography.Text>数据源加载失败，请重试。</Typography.Text>
             <div style={{ marginTop: 10 }}>
-              <Button size="mini" onClick={loadDatasets}>重试</Button>
+              <Button size="mini" onClick={loadDatasources}>重试</Button>
             </div>
           </div>
         )}
-        <Form.Item label="数据集" field="datasetId" rules={[{ required: true, message: '请选择数据集' }]}>
+        <Form.Item label="数据源" field="datasourceId" rules={[{ required: true, message: '请选择数据源' }]}>
           <Select
-            placeholder="选择要发布的数据集（表）"
-            loading={datasetsLoading}
-            disabled={datasetsLoading}
-            onChange={onDatasetChange}
-            options={datasets.map((d) => ({ value: d.id, label: `${d.name}（${d.rowCount} 行）` }))}
+            placeholder="选择数据源"
+            loading={dsLoading}
+            onChange={onDatasourceChange}
+            options={dsList.map((d) => ({ value: d.id, label: `${d.name}（${d.type}）` }))}
           />
         </Form.Item>
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item label="Schema" field="schemaName" extra="不选则使用数据源默认 schema">
+              <Select
+                placeholder="默认 schema"
+                loading={schemaLoading}
+                allowClear
+                showSearch
+                disabled={!watchDs}
+                onChange={onSchemaChange}
+                options={schemaOptions}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item label="数据表" field="tableName" rules={[{ required: true, message: '请选择表' }]}>
+              <Select
+                placeholder="选择要发布的表"
+                loading={tableLoading}
+                showSearch
+                disabled={!watchDs}
+                onChange={onTableChange}
+                options={tableOptions}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
 
         <Typography.Title heading={6} style={{ margin: '24px 0 16px' }}>
           数据权限

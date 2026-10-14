@@ -16,7 +16,9 @@ public class ApiPubEntity {
     private String name;
     /** 全局唯一路径段，/api/open/{path} */
     private String path;
-    private Long datasetId;
+    private Long datasourceId;
+    private String schemaName;
+    private String tableName;
     /** JSON 数组：暴露列（有序） */
     private String columns;
     /** JSON 数组：允许等值过滤的列子集 */

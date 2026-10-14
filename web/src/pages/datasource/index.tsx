@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Drawer, Message, Modal, Space,
-  Table, Tag, Typography,
+  Button, Message, Modal, Space,
+  Table, Typography,
 } from '@arco-design/web-react';
 import { IconPlus, IconRefresh } from '@arco-design/web-react/icon';
 import {
-  ColumnInfo, DataSourceInfo, deleteDatasource, listColumns,
-  listDatasources, listTables, testDatasource,
+  DataSourceInfo, deleteDatasource,
+  listDatasources, testDatasource,
 } from '../../api/datasource';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -22,10 +22,6 @@ export default function DatasourcePage() {
   const [list, setList] = useState<DataSourceInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState(false);
-  const [browseDs, setBrowseDs] = useState<DataSourceInfo | null>(null);
-  const [tables, setTables] = useState<{ name: string }[]>([]);
-  const [columns, setColumns] = useState<ColumnInfo[]>([]);
-  const [currentTable, setCurrentTable] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -68,29 +64,6 @@ export default function DatasourcePage() {
         }
       },
     });
-  }
-
-  async function openBrowse(ds: DataSourceInfo) {
-    setBrowseDs(ds);
-    setCurrentTable(null);
-    setColumns([]);
-    try {
-      setTables(await listTables(ds.id));
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '读取表列表失败');
-      setTables([]);
-    }
-  }
-
-  async function onPickTable(t: string) {
-    if (!browseDs) return;
-    setCurrentTable(t);
-    setColumns([]);
-    try {
-      setColumns(await listColumns(browseDs.id, t));
-    } catch (e: any) {
-      Message.error(e.response?.data?.message || '读取列信息失败');
-    }
   }
 
   return (
@@ -151,7 +124,6 @@ export default function DatasourcePage() {
                     <Space>
                       <Button size="mini" onClick={() => onTestExisting(row)}>测连接</Button>
                       <Button size="mini" type="text" onClick={() => nav(`/datasource/${row.id}/edit`)}>编辑</Button>
-                      <Button size="mini" type="text" onClick={() => openBrowse(row)}>表浏览</Button>
                       {(
                         <Button size="mini" type="text" status="danger" onClick={() => onDelete(row)}>删除</Button>
                       )}
@@ -175,49 +147,6 @@ export default function DatasourcePage() {
           </>
         )}
       </section>
-
-      <Drawer
-        title={browseDs ? `表浏览 · ${browseDs.name}` : ''}
-        visible={!!browseDs}
-        onCancel={() => setBrowseDs(null)}
-        width={560}
-        footer={null}
-      >
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          点击表名查看列结构
-        </Typography.Text>
-        <Table
-          style={{ marginTop: 8 }}
-          data={tables}
-          rowKey="name"
-          size="small"
-          pagination={{ pageSize: 12 }}
-          onRow={(record) => ({ onClick: () => onPickTable(record.name), style: { cursor: 'pointer' } })}
-          columns={[
-            { title: '表名', dataIndex: 'name' },
-            {
-              title: '', width: 60,
-              render: (_: unknown, row: { name: string }) =>
-                currentTable === row.name ? <Tag size="small" color="arcoblue">列</Tag> : null,
-            },
-          ]}
-        />
-        {currentTable && (
-          <div style={{ marginTop: 16 }}>
-            <Typography.Title heading={6}>列结构 · {currentTable}</Typography.Title>
-            <Table
-              data={columns}
-              rowKey="name"
-              size="small"
-              pagination={false}
-              columns={[
-                { title: '列名', dataIndex: 'name' },
-                { title: '类型', dataIndex: 'type', width: 160 },
-              ]}
-            />
-          </div>
-        )}
-      </Drawer>
     </div>
   );
 }

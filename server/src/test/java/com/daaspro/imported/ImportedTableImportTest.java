@@ -1,7 +1,7 @@
-package com.daaspro.dataset;
+package com.daaspro.imported;
 
 import com.daaspro.common.exception.BizException;
-import com.daaspro.dataset.service.DatasetService;
+import com.daaspro.imported.service.ImportedTableService;
 import com.daaspro.datasource.service.DataSourceService;
 import com.daaspro.tenant.context.TenantContext;
 import com.daaspro.tenant.service.TenantService;
@@ -18,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** 上传导入到用户自有数据源：建表导入 + 追加 + 预览。 */
 @SpringBootTest
 @Transactional
-class DatasetImportTest {
+class ImportedTableImportTest {
 
-    @Autowired DatasetService datasetService;
+    @Autowired ImportedTableService ImportedTableService;
     @Autowired TenantService tenantService;
     @Autowired DataSourceService dataSourceService;
 
@@ -44,34 +44,34 @@ class DatasetImportTest {
     @Test
     void importsCreatesTableAndAppendWorks() {
         var ctx = setup();
-        var up = datasetService.upload(csv());
-        var created = datasetService.confirm(new DatasetService.ConfirmReq(
-                up.uploadId(), "导入订单" + ctx.slug(), "orders.csv", up.columns(), up.types(), ctx.dsId(), null));
+        var up = ImportedTableService.upload(csv());
+        var created = ImportedTableService.confirm(new ImportedTableService.ConfirmReq(
+                up.uploadId(), "导入订单" + ctx.slug(), "orders.csv", up.columns(), up.types(), ctx.dsId(), null, null));
         assertThat(created.getRowCount()).isEqualTo(3);
         assertThat(created.getDatasourceId()).isEqualTo(ctx.dsId());
 
-        var preview = datasetService.preview(created.getId());
+        var preview = ImportedTableService.preview(created.getId());
         assertThat(preview.rows()).hasSize(3);
         assertThat(preview.columns()).extracting(c -> c.get("name"))
                 .containsExactly("id", "city", "amount");
 
-        var up2 = datasetService.upload(csv());
-        var appended = datasetService.confirm(new DatasetService.ConfirmReq(
-                up2.uploadId(), null, "orders.csv", up2.columns(), up2.types(), ctx.dsId(), created.getTableName()));
+        var up2 = ImportedTableService.upload(csv());
+        var appended = ImportedTableService.confirm(new ImportedTableService.ConfirmReq(
+                up2.uploadId(), null, "orders.csv", up2.columns(), up2.types(), ctx.dsId(), null, created.getTableName()));
         assertThat(appended.getId()).isEqualTo(created.getId());
         assertThat(appended.getRowCount()).isEqualTo(6);
 
         // 外部库连接不在测试事务内，显式清理物理表
-        datasetService.delete(created.getId());
+        ImportedTableService.delete(created.getId());
     }
 
     @Test
     void datasourceIdRequired() {
         var ctx = setup();
-        var up = datasetService.upload(csv());
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> datasetService.confirm(
-                        new DatasetService.ConfirmReq(up.uploadId(), "无源导入", "orders.csv",
-                                up.columns(), up.types(), null, null)))
+        var up = ImportedTableService.upload(csv());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ImportedTableService.confirm(
+                        new ImportedTableService.ConfirmReq(up.uploadId(), "无源导入", "orders.csv",
+                                up.columns(), up.types(), null, null, null)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("请选择目标数据源");
     }

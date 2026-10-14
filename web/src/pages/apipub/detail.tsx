@@ -4,9 +4,10 @@ import {
   Button, Checkbox, Descriptions, Input, InputNumber, Message, Modal, Space, Switch, Tag, Typography,
 } from '@arco-design/web-react';
 import {
-  ApiAppInfo, ApiPubInfo, ColumnDef, datasetColumns, deleteApi, getApi, getApiGrants,
+  ApiAppInfo, ApiPubInfo, ColumnDef, deleteApi, getApi, getApiGrants,
   listApps, revealAppSecret, setApiGrants, updateApi,
 } from '../../api/apipub';
+import { listColumns } from '../../api/datasource';
 
 const CheckboxGroup = Checkbox.Group;
 
@@ -61,11 +62,11 @@ export default function ApiPubDetailPage() {
     }
   }, [apiId]);
 
-  const loadColumns = useCallback(async (datasetId: number) => {
+  const loadColumns = useCallback(async (a: ApiPubInfo) => {
     setColumnsLoading(true);
     setColumnsLoadError(false);
     try {
-      setCols(await datasetColumns(datasetId));
+      setCols(await listColumns(a.datasourceId, a.tableName, a.schemaName || undefined));
     } catch {
       setColumnsLoadError(true);
     } finally {
@@ -84,7 +85,7 @@ export default function ApiPubDetailPage() {
       setFilterColumns(a.filterColumns);
       setMaxRows(a.maxRows);
       setApiLoading(false);
-      void loadColumns(a.datasetId);
+      void loadColumns(a);
       await loadApps();
       await loadGrants();
     } catch {
@@ -207,8 +208,8 @@ export default function ApiPubDetailPage() {
             <Typography.Text type="secondary">端点</Typography.Text>
             <code>{origin}/api/open/{api.path}</code>
             <Tag color="blue">GET</Tag>
-            <Typography.Text type="secondary">数据集</Typography.Text>
-            <Typography.Text>{api.datasetName}（{api.datasetId}）</Typography.Text>
+            <Typography.Text type="secondary">数据表</Typography.Text>
+            <Typography.Text>{api.datasourceName} · {api.schemaName ? `${api.schemaName}.` : ''}{api.tableName}</Typography.Text>
           </Space>
         </div>
         <div className="page-header-actions">
@@ -228,7 +229,7 @@ export default function ApiPubDetailPage() {
           column={1}
           data={[
             { label: '路径', value: <code>{origin}/api/open/{api.path}</code> },
-            { label: '数据集', value: `${api.datasetName}（${api.datasetId}）` },
+            { label: '数据表', value: `${api.datasourceName} · ${api.schemaName ? `${api.schemaName}.` : ''}${api.tableName}` },
           ]}
           style={{ marginBottom: 16 }}
         />
@@ -248,14 +249,14 @@ export default function ApiPubDetailPage() {
         </Space>
         {columnsLoadError && !columnsLoading ? (
           <div className="page-error" role="alert" style={{ marginTop: 12, padding: '8px 12px', textAlign: 'left' }}>
-            <Typography.Text>数据集列加载失败，请重试。</Typography.Text>
-            <Button size="mini" loading={columnsLoading} onClick={() => loadColumns(api.datasetId)} style={{ marginLeft: 10 }}>
+            <Typography.Text>表列加载失败，请重试。</Typography.Text>
+            <Button size="mini" loading={columnsLoading} onClick={() => loadColumns(api)} style={{ marginLeft: 10 }}>
               重试
             </Button>
           </div>
         ) : columnsLoading ? (
           <Typography.Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
-            正在加载数据集列…
+            正在加载表列…
           </Typography.Text>
         ) : cols.length > 0 && (
           <>

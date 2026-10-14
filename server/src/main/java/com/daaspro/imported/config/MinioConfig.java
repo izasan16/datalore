@@ -1,4 +1,4 @@
-package com.daaspro.dataset.config;
+package com.daaspro.imported.config;
 
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;

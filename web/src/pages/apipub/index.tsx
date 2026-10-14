@@ -34,7 +34,7 @@ export default function ApiPubPage() {
             API 发布
           </Typography.Title>
           <Typography.Text type="secondary">
-            把数据管理中的数据集发布为只读 REST API，外部应用通过 AppKey/Secret 调用 GET /api/open/{'{path}'}
+            把数据源中的表发布为只读 REST API，外部应用通过 AppKey/Secret 调用 GET /api/open/{'{path}'}
           </Typography.Text>
         </div>
         <div className="page-header-actions">
@@ -78,7 +78,7 @@ export default function ApiPubPage() {
                 render: (_, r) => <Link to={`/apipub/${r.id}`}>{r.name}</Link>,
               },
               { title: '路径', dataIndex: 'path', render: (p: string) => <code>/api/open/{p}</code> },
-              { title: '数据集', dataIndex: 'datasetName' },
+              { title: '数据表', render: (_: unknown, row: ApiPubInfo) => `${row.datasourceName} · ${row.schemaName ? `${row.schemaName}.` : ''}${row.tableName}` },
               { title: '暴露列数', dataIndex: 'columns', render: (c: string[]) => c.length },
               { title: '授权应用', dataIndex: 'grantCount' },
               { title: '行数上限', dataIndex: 'maxRows' },

@@ -1,10 +1,10 @@
-package com.daaspro.dataset.service;
+package com.daaspro.imported.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.daaspro.common.exception.BizException;
 import com.daaspro.common.security.AesGcmCipher;
-import com.daaspro.dataset.entity.DatasetEntity;
-import com.daaspro.dataset.mapper.DatasetMapper;
+import com.daaspro.imported.entity.ImportedTableEntity;
+import com.daaspro.imported.mapper.ImportedTableMapper;
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.service.ConnectionManager;
 import com.daaspro.datasource.service.DataSourceService;
@@ -32,12 +32,12 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 @Service
-public class DatasetService {
+public class ImportedTableService {
 
     private static final Set<String> ALLOWED_TYPES = Set.of("bigint", "numeric", "text", "timestamp", "date", "boolean");
     private static final long MAX_SIZE = 20L * 1024 * 1024;
 
-    private final DatasetMapper mapper;
+    private final ImportedTableMapper mapper;
     private final DataSourceService dataSourceService;
     private final ConnectionManager connectionManager;
     private final AesGcmCipher cipher;
@@ -46,7 +46,7 @@ public class DatasetService {
     private final String bucket;
     private final ObjectMapper om = new ObjectMapper();
 
-    public DatasetService(DatasetMapper mapper, DataSourceService dataSourceService,
+    public ImportedTableService(ImportedTableMapper mapper, DataSourceService dataSourceService,
                           ConnectionManager connectionManager, AesGcmCipher cipher, TabularParser parser,
                           MinioClient minio, @Value("${daaspro.minio.bucket}") String bucket) {
         this.mapper = mapper;
@@ -83,10 +83,10 @@ public class DatasetService {
 
     public record ConfirmReq(String uploadId, String name, String fileName,
                              List<String> columns, List<String> types, Long datasourceId,
-                             String existingTable) {}
+                             String schemaName, String existingTable) {}
 
     /** 确认导入。目标数据源必填；existingTable 非空 → 向已有表追加（校验列名完全一致）。 */
-    public DatasetEntity confirm(ConfirmReq req) {
+    public ImportedTableEntity confirm(ConfirmReq req) {
         if (req.columns() == null || req.columns().isEmpty() || req.types() == null
                 || req.columns().size() != req.types().size()) {
             throw new BizException(400, "列定义不完整");
@@ -96,8 +96,9 @@ public class DatasetService {
         }
         boolean append0 = req.existingTable() != null && !req.existingTable().isBlank();
         if (!append0 && (req.name() == null || req.name().isBlank())) {
-            throw new BizException(400, "数据集名称不能为空");
+            throw new BizException(400, "名称不能为空");
         }
+        String schema = req.schemaName() == null || req.schemaName().isBlank() ? null : req.schemaName().trim();
 
         DataSourceEntity target;
         if (req.datasourceId == null) {
@@ -108,10 +109,10 @@ public class DatasetService {
         boolean append = req.existingTable() != null && !req.existingTable().isBlank();
 
         if (!append) {
-            Long dup = mapper.selectCount(new LambdaQueryWrapper<DatasetEntity>()
-                    .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
-                    .eq(DatasetEntity::getName, req.name()));
-            if (dup > 0) throw new BizException(400, "同名数据集已存在");
+            Long dup = mapper.selectCount(new LambdaQueryWrapper<ImportedTableEntity>()
+                    .eq(ImportedTableEntity::getTenantId, TenantContext.requireTenantId())
+                    .eq(ImportedTableEntity::getName, req.name()));
+            if (dup > 0) throw new BizException(400, "同名导入已存在");
         }
 
         byte[] csv = download(req.uploadId());
@@ -123,54 +124,55 @@ public class DatasetService {
         if (append) {
             table = req.existingTable();
             // 校验目标表存在且列名一致（列名集合与顺序都要求一致，导入语义最简单可靠）
-            List<Map<String, String>> actual = tableColumns(target, table);
+            List<Map<String, String>> actual = tableColumns(target, table, schema);
             if (actual.isEmpty()) throw new BizException(400, "目标表不存在: " + table);
             List<String> actualNames = actual.stream().map(c -> c.get("name")).toList();
             if (!actualNames.equals(columns)) {
                 throw new BizException(400, "列与目标表不一致。目标表列: " + actualNames);
             }
-            copyCount = insertRows(target, table, columns, csv, true);
-            // 追加到已有数据集：只更新其行数，不新建记录（否则删除任一条会连坐共享物理表）
-            DatasetEntity existing = mapper.selectList(new LambdaQueryWrapper<DatasetEntity>()
-                            .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
-                            .eq(DatasetEntity::getTableName, table))
+            copyCount = insertRows(target, schema, table, columns, csv, true);
+            // 追加到已有导入表：只更新其行数，不新建记录（否则删除任一条会连坐共享物理表）
+            ImportedTableEntity existing = mapper.selectList(new LambdaQueryWrapper<ImportedTableEntity>()
+                            .eq(ImportedTableEntity::getTenantId, TenantContext.requireTenantId())
+                            .eq(ImportedTableEntity::getTableName, table))
                     .stream().findFirst().orElse(null);
             if (existing != null) {
-                existing.setRowCount(countRows(target, table));
+                existing.setRowCount(countRows(target, schema, table));
                 mapper.updateById(existing);
                 return existing;
             }
             // 目标表不是本平台数据集：拒绝，避免一张表挂两条记录
-            throw new BizException(400, "目标表不属于任何数据集，无法以追加方式管理");
+            throw new BizException(400, "目标表不是本平台导入的表，无法以追加方式管理");
         }
 
         table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        copyCount = createTableAndInsert(target, table, columns, types, csv);
+        copyCount = createTableAndInsert(target, schema, table, columns, types, csv);
 
-        DatasetEntity ds = new DatasetEntity();
-        ds.setTenantId(TenantContext.requireTenantId());
-        ds.setName(req.name());
-        ds.setTableName(table);
-        ds.setDatasourceId(target.getId());
-        ds.setColumnsDef(toColumnsJson(columns, types));
-        ds.setFileName(req.fileName());
-        ds.setRowCount(copyCount);
-        mapper.insert(ds);
-        return ds;
+        ImportedTableEntity rec = new ImportedTableEntity();
+        rec.setTenantId(TenantContext.requireTenantId());
+        rec.setName(req.name());
+        rec.setTableName(table);
+        rec.setSchemaName(schema);
+        rec.setDatasourceId(target.getId());
+        rec.setColumnsDef(toColumnsJson(columns, types));
+        rec.setFileName(req.fileName());
+        rec.setRowCount(copyCount);
+        mapper.insert(rec);
+        return rec;
     }
 
     /** 建表并批量 INSERT 导入，返回导入行数。 */
-    private long createTableAndInsert(DataSourceEntity ds, String table,
+    private long createTableAndInsert(DataSourceEntity ds, String schema, String table,
                                     List<String> columns, List<String> types, byte[] csv) {
         String colDefs = IntStream.range(0, columns.size())
                 .mapToObj(i -> quoteIdent(ds, columns.get(i)) + " " + types.get(i))
                 .reduce((a, b) -> a + ", " + b).orElse("");
-        String ddl = "CREATE TABLE " + quoteIdent(ds, table) + " (" + colDefs + ")";
+        String ddl = "CREATE TABLE " + qualified(ds, schema, table) + " (" + colDefs + ")";
         try (Connection conn = openConnection(ds)) {
             try (var st = conn.createStatement()) {
                 st.execute(ddl);
             }
-            return insertRows(ds, table, columns, csv, true);
+            return insertRows(ds, schema, table, columns, csv, true);
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
@@ -178,10 +180,10 @@ public class DatasetService {
         }
     }
 
-    private long insertRows(DataSourceEntity ds, String table, List<String> columns, byte[] csv, boolean header) {
+    private long insertRows(DataSourceEntity ds, String schema, String table, List<String> columns, byte[] csv, boolean header) {
         String colList = columns.stream().map(c -> quoteIdent(ds, c)).reduce((a, b) -> a + "," + b).orElse("");
         String placeholders = "(" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
-        String insertSql = "INSERT INTO " + quoteIdent(ds, table) + " (" + colList + ") VALUES " + placeholders;
+        String insertSql = "INSERT INTO " + qualified(ds, schema, table) + " (" + colList + ") VALUES " + placeholders;
         try (Connection conn = openConnection(ds);
              var reader = CSVFormat.DEFAULT.parse(new java.io.InputStreamReader(
                      new ByteArrayInputStream(csv), StandardCharsets.UTF_8))) {
@@ -224,14 +226,14 @@ public class DatasetService {
     }
 
     /** 读取目标表列结构（按数据源类型）。 */
-    private List<Map<String, String>> tableColumns(DataSourceEntity ds, String table) {
-        return dataSourceService.listColumns(ds.getId(), table, null);
+    private List<Map<String, String>> tableColumns(DataSourceEntity ds, String table, String schema) {
+        return dataSourceService.listColumns(ds.getId(), table, schema);
     }
 
     /** 表实际行数（追加后刷新数据集计数用）。 */
-    private long countRows(DataSourceEntity ds, String table) {
+    private long countRows(DataSourceEntity ds, String schema, String table) {
         try (Connection conn = openConnection(ds);
-             var st = conn.prepareStatement("SELECT count(*) FROM " + quoteIdent(ds, table));
+             var st = conn.prepareStatement("SELECT count(*) FROM " + qualified(ds, schema, table));
              var rs = st.executeQuery()) {
             return rs.next() ? rs.getLong(1) : 0;
         } catch (Exception e) {
@@ -240,11 +242,12 @@ public class DatasetService {
     }
 
     public List<Map<String, Object>> list() {
-        return mapper.selectList(new LambdaQueryWrapper<DatasetEntity>()
-                .eq(DatasetEntity::getTenantId, TenantContext.requireTenantId())
-                .orderByDesc(DatasetEntity::getId)).stream()
+        return mapper.selectList(new LambdaQueryWrapper<ImportedTableEntity>()
+                .eq(ImportedTableEntity::getTenantId, TenantContext.requireTenantId())
+                .orderByDesc(ImportedTableEntity::getId)).stream()
                 .map(d -> Map.<String, Object>of("id", d.getId(), "name", d.getName(),
-                        "tableName", d.getTableName(), "rowCount", d.getRowCount(),
+                        "tableName", d.getTableName(), "schemaName", d.getSchemaName() == null ? "" : d.getSchemaName(),
+                        "datasourceId", d.getDatasourceId(), "rowCount", d.getRowCount(),
                         "fileName", d.getFileName() == null ? "" : d.getFileName(),
                         "createdAt", d.getCreatedAt() == null ? "" : d.getCreatedAt().toString()))
                 .toList();
@@ -253,10 +256,10 @@ public class DatasetService {
     public record Preview(List<Map<String, String>> columns, List<List<String>> rows) {}
 
     public Preview preview(Long id) {
-        DatasetEntity d = getOwned(id);
+        ImportedTableEntity d = getOwned(id);
         List<Map<String, String>> cols = parseColumns(d.getColumnsDef());
         DataSourceEntity ds = dataSourceService.getOwned(d.getDatasourceId());
-        String sql = "SELECT * FROM " + quoteIdent(ds, d.getTableName()) + " LIMIT 20";
+        String sql = "SELECT * FROM " + qualified(ds, d.getSchemaName(), d.getTableName()) + " LIMIT 20";
         try (Connection conn = openConnection(ds);
              var st = conn.createStatement();
              var rs = st.executeQuery(sql)) {
@@ -275,12 +278,12 @@ public class DatasetService {
     }
 
     public void delete(Long id) {
-        DatasetEntity d = getOwned(id);
+        ImportedTableEntity d = getOwned(id);
         try {
             DataSourceEntity ds = dataSourceService.getOwned(d.getDatasourceId());
             try (Connection conn = openConnection(ds);
                  var st = conn.createStatement()) {
-                st.execute("DROP TABLE IF EXISTS " + quoteIdent(ds, d.getTableName()));
+                st.execute("DROP TABLE IF EXISTS " + qualified(ds, d.getSchemaName(), d.getTableName()));
             }
         } catch (BizException e) {
             if (!"数据源不存在".equals(e.getMessage())) throw e;
@@ -291,10 +294,10 @@ public class DatasetService {
         mapper.deleteById(id);
     }
 
-    private DatasetEntity getOwned(Long id) {
-        DatasetEntity d = mapper.selectById(id);
+    private ImportedTableEntity getOwned(Long id) {
+        ImportedTableEntity d = mapper.selectById(id);
         if (d == null || !d.getTenantId().equals(TenantContext.requireTenantId())) {
-            throw new BizException(404, "数据集不存在");
+            throw new BizException(404, "导入记录不存在");
         }
         return d;
     }
@@ -329,6 +332,12 @@ public class DatasetService {
             return "`" + ident.replace("`", "``") + "`";
         }
         return quote(ident);
+    }
+
+    /** schema 限定名；schema 为空时落库默认 schema（裸表名）。 */
+    private String qualified(DataSourceEntity ds, String schema, String ident) {
+        return schema == null || schema.isBlank() ? quoteIdent(ds, ident)
+                : quoteIdent(ds, schema) + "." + quoteIdent(ds, ident);
     }
 
     private String toColumnsJson(List<String> columns, List<String> types) {

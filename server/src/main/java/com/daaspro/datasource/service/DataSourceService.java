@@ -159,6 +159,62 @@ public class DataSourceService {
         }
     }
 
+    /** 表数据预览：列结构 + 前 limit 行 + COUNT(*) 行数。只读，标识符严格校验。 */
+    public Map<String, Object> previewTable(Long id, String schemaParam, String table, int limit) {
+        DataSourceEntity ds = getOwned(id);
+        String schema = schemaParam == null || schemaParam.isBlank() ? defaultSchema(ds) : schemaParam.trim();
+        validateIdent(schema, "schema");
+        validateIdent(table, "表名");
+        int capped = Math.max(1, Math.min(limit, 100));
+        String qualified = quoteIdent(ds, schema) + "." + quoteIdent(ds, table);
+        String limitClause = switch (ds.getType()) {
+            case "sqlserver" -> "SELECT TOP " + capped + " * FROM " + qualified;
+            case "oracle" -> "SELECT * FROM " + qualified + " FETCH FIRST " + capped + " ROWS ONLY";
+            default -> "SELECT * FROM " + qualified + " LIMIT " + capped;
+        };
+        try (var conn = open(ds)) {
+            long total;
+            try (var st = conn.prepareStatement("SELECT count(*) FROM " + qualified);
+                 var rs = st.executeQuery()) {
+                total = rs.next() ? rs.getLong(1) : 0;
+            }
+            List<Map<String, String>> columns = new ArrayList<>();
+            List<List<String>> rows = new ArrayList<>();
+            try (var st = conn.createStatement(); var rs = st.executeQuery(limitClause)) {
+                var md = rs.getMetaData();
+                for (int i = 1; i <= md.getColumnCount(); i++) {
+                    columns.add(Map.of("name", md.getColumnLabel(i), "type", md.getColumnTypeName(i)));
+                }
+                while (rs.next()) {
+                    List<String> row = new ArrayList<>();
+                    for (int i = 1; i <= md.getColumnCount(); i++) row.add(rs.getString(i));
+                    rows.add(row);
+                }
+            }
+            return Map.of("columns", columns, "rows", rows, "total", total);
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "预览失败: " + rootMessage(e));
+        }
+    }
+
+    private static final java.util.regex.Pattern IDENT = java.util.regex.Pattern.compile("^[A-Za-z_][A-Za-z0-9_$]*$");
+
+    private void validateIdent(String value, String label) {
+        if (value == null || !IDENT.matcher(value).matches()) {
+            throw new BizException(400, label + "非法: " + value);
+        }
+    }
+
+    /** MySQL 用反引号，其余（PG/SQL Server/Oracle）用双引号。 */
+    private String quoteIdent(DataSourceEntity ds, String ident) {
+        if ("mysql".equals(ds.getType())) {
+            return "`" + ident.replace("`", "``") + "`";
+        }
+        return "\"" + ident.replace("\"", "\"\"") + "\"";
+    }
+
     private java.sql.Connection open(DataSourceEntity ds) throws Exception {
         return connectionManager.pool(ds, cipher.decrypt(ds.getPasswordEnc())).getConnection();
     }

@@ -2,8 +2,8 @@ package com.daaspro.apipub;
 
 import com.daaspro.apipub.entity.ApiAppEntity;
 import com.daaspro.apipub.entity.ApiPubEntity;
-import com.daaspro.dataset.entity.DatasetEntity;
-import com.daaspro.dataset.mapper.DatasetMapper;
+import com.daaspro.datasource.entity.DataSourceEntity;
+import com.daaspro.datasource.mapper.DataSourceMapper;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -21,12 +21,12 @@ public class ApiPubController {
 
     private final ApiAppService appService;
     private final ApiPubService pubService;
-    private final DatasetMapper datasetMapper;
+    private final DataSourceMapper dsMapper;
 
-    public ApiPubController(ApiAppService appService, ApiPubService pubService, DatasetMapper datasetMapper) {
+    public ApiPubController(ApiAppService appService, ApiPubService pubService, DataSourceMapper dsMapper) {
         this.appService = appService;
         this.pubService = pubService;
-        this.datasetMapper = datasetMapper;
+        this.dsMapper = dsMapper;
     }
 
     // ---------- 应用 ----------
@@ -75,7 +75,8 @@ public class ApiPubController {
 
     // ---------- 发布 ----------
 
-    public record CreateReq(@NotBlank String name, @NotBlank String path, Long datasetId,
+    public record CreateReq(@NotBlank String name, @NotBlank String path, Long datasourceId,
+                            String schemaName, String tableName,
                             List<String> columns, List<String> filterColumns, Integer maxRows) {}
 
     public record UpdateReq(String name, List<String> columns, List<String> filterColumns,
@@ -100,7 +101,8 @@ public class ApiPubController {
     @PostMapping("/apipubs")
     public Map<String, Object> createPub(@RequestBody CreateReq req) {
         var a = pubService.create(new ApiPubService.CreateReq(
-                req.name(), req.path(), req.datasetId(), req.columns(), req.filterColumns(), req.maxRows()));
+                req.name(), req.path(), req.datasourceId(), req.schemaName(), req.tableName(),
+                req.columns(), req.filterColumns(), req.maxRows()));
         return toView(a);
     }
 
@@ -128,21 +130,16 @@ public class ApiPubController {
         return Map.of("ok", true);
     }
 
-    /** 数据集列（供发布表单选择暴露列/过滤列） */
-    @GetMapping("/apipubs/dataset-columns")
-    public List<Map<String, String>> datasetColumns(@RequestParam Long datasetId) {
-        DatasetEntity d = pubService.getDatasetOwned(datasetId);
-        return pubService.parseColumns(d.getColumnsDef());
-    }
-
     private Map<String, Object> toView(ApiPubEntity a) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", a.getId());
         m.put("name", a.getName());
         m.put("path", a.getPath());
-        m.put("datasetId", a.getDatasetId());
-        DatasetEntity d = datasetMapper.selectById(a.getDatasetId());
-        m.put("datasetName", d == null ? "(数据集已删除)" : d.getName());
+        m.put("datasourceId", a.getDatasourceId());
+        m.put("schemaName", a.getSchemaName() == null ? "" : a.getSchemaName());
+        m.put("tableName", a.getTableName() == null ? "" : a.getTableName());
+        DataSourceEntity ds = a.getDatasourceId() == null ? null : dsMapper.selectById(a.getDatasourceId());
+        m.put("datasourceName", ds == null ? "(数据源已删除)" : ds.getName());
         m.put("columns", pubService.parseJson(a.getColumns()));
         m.put("filterColumns", pubService.parseJson(a.getFilterColumns()));
         m.put("maxRows", a.getMaxRows());

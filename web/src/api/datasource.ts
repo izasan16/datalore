@@ -53,3 +53,13 @@ export function listTables(id: number, schema?: string) {
 export function listColumns(id: number, table: string, schema?: string) {
   return http.get<ColumnInfo[]>(`/datasources/${id}/tables/${table}/columns`, { params: schema ? { schema } : undefined }).then((r) => r.data);
 }
+
+export interface TablePreview {
+  columns: ColumnInfo[];
+  rows: string[][];
+  total: number;
+}
+
+export function previewTable(id: number, table: string, schema?: string) {
+  return http.get<TablePreview>(`/datasources/${id}/tables/preview`, { params: { table, ...(schema ? { schema } : {}) } }).then((r) => r.data);
+}

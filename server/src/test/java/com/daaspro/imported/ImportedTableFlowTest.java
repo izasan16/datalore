@@ -1,4 +1,4 @@
-package com.daaspro.dataset;
+package com.daaspro.imported;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +16,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class DatasetFlowTest {
+class ImportedTableFlowTest {
 
     @Autowired TestRestTemplate bootRest;
 
@@ -38,7 +38,7 @@ class DatasetFlowTest {
     /** 新规则：导入必须显式指定目标数据源。注册一个指向平台 PG 的外部数据源。 */
     private long extDatasource(String token, String tag) {
         var created = rest().postForEntity(url("/api/datasources"),
-                new HttpEntity<>(Map.of("name", "数据集PG-" + tag, "type", "postgresql",
+                new HttpEntity<>(Map.of("name", "导入PG-" + tag, "type", "postgresql",
                         "host", "localhost", "port", 15432, "databaseName", "daaspro",
                         "schemaName", "public", "username", "daaspro", "password", "daaspro_dev_2026"),
                         jsonHeaders(token)), Map.class);
@@ -49,7 +49,7 @@ class DatasetFlowTest {
     private String token() {
         String adminUser = "dsflow" + System.currentTimeMillis();
         rest().postForEntity(url("/api/tenant/register"),
-                Map.of("name", "数据集租户" + adminUser, "adminUsername", adminUser,
+                Map.of("name", "导入租户" + adminUser, "adminUsername", adminUser,
                         "adminPassword", "password123"), Map.class);
         var login = rest().postForEntity(url("/api/auth/login"),
                 Map.of("username", adminUser, "password", "password123"), Map.class);
@@ -80,7 +80,7 @@ class DatasetFlowTest {
         };
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", res);
-        var up = rest().postForEntity(url("/api/datasets/upload"),
+        var up = rest().postForEntity(url("/api/imported-tables/upload"),
                 new HttpEntity<>(body, authMultipart(token)), Map.class);
         assertThat(up.getStatusCode().is2xxSuccessful()).isTrue();
         // ",,," 是含 3 个空字段的行（非空行），保留为 1 条全空记录
@@ -88,10 +88,10 @@ class DatasetFlowTest {
         assertThat((java.util.List<Object>) up.getBody().get("types"))
                 .containsExactly("text", "bigint", "numeric", "date");
 
-        var confirm = rest().postForEntity(url("/api/datasets/confirm"),
+        var confirm = rest().postForEntity(url("/api/imported-tables/confirm"),
                 new HttpEntity<>(Map.of(
                         "uploadId", up.getBody().get("uploadId"),
-                        "name", "演示数据集" + System.currentTimeMillis(),
+                        "name", "演示导入" + System.currentTimeMillis(),
                         "fileName", "demo.csv",
                         "columns", up.getBody().get("columns"),
                         "types", up.getBody().get("types"),
@@ -99,17 +99,17 @@ class DatasetFlowTest {
         assertThat(confirm.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(((Number) confirm.getBody().get("rowCount")).longValue()).isEqualTo(4L);
 
-        var list = rest().exchange(url("/api/datasets"), HttpMethod.GET,
+        var list = rest().exchange(url("/api/imported-tables"), HttpMethod.GET,
                 new HttpEntity<>(jsonHeaders(token)), java.util.List.class);
         assertThat((java.util.List<Object>) list.getBody()).hasSize(1);
 
         Number id = (Number) confirm.getBody().get("id");
-        var preview = rest().exchange(url("/api/datasets/" + id + "/preview"), HttpMethod.GET,
+        var preview = rest().exchange(url("/api/imported-tables/" + id + "/preview"), HttpMethod.GET,
                 new HttpEntity<>(jsonHeaders(token)), Map.class);
         assertThat(preview.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat((java.util.List<Object>) preview.getBody().get("rows")).hasSize(4);
 
-        var del = rest().exchange(url("/api/datasets/" + id), HttpMethod.DELETE,
+        var del = rest().exchange(url("/api/imported-tables/" + id), HttpMethod.DELETE,
                 new HttpEntity<>(jsonHeaders(token)), Map.class);
         assertThat(del.getStatusCode().is2xxSuccessful()).isTrue();
     }
@@ -129,7 +129,7 @@ class DatasetFlowTest {
         assertThat(((Number) second.get("id")).longValue()).isEqualTo(((Number) first.get("id")).longValue());
 
         // 预览第一批：表里现在应该有 3 行（preview LIMIT 20 覆盖全部）
-        var preview = rest().exchange(url("/api/datasets/" + ((Number) first.get("id")).longValue() + "/preview"),
+        var preview = rest().exchange(url("/api/imported-tables/" + ((Number) first.get("id")).longValue() + "/preview"),
                 HttpMethod.GET, new HttpEntity<>(jsonHeaders(token)), Map.class);
         assertThat((java.util.List<Object>) preview.getBody().get("rows")).hasSize(3);
     }
@@ -140,7 +140,7 @@ class DatasetFlowTest {
         };
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", res);
-        var up = rest().postForEntity(url("/api/datasets/upload"),
+        var up = rest().postForEntity(url("/api/imported-tables/upload"),
                 new HttpEntity<>(body, authMultipart(token)), Map.class);
         var payload = new java.util.HashMap<String, Object>();
         payload.put("uploadId", up.getBody().get("uploadId"));
@@ -150,14 +150,14 @@ class DatasetFlowTest {
         payload.put("types", up.getBody().get("types"));
         payload.put("datasourceId", datasourceId);
         if (existingTable != null) payload.put("existingTable", existingTable);
-        var confirm = rest().postForEntity(url("/api/datasets/confirm"),
+        var confirm = rest().postForEntity(url("/api/imported-tables/confirm"),
                 new HttpEntity<>(payload, jsonHeaders(token)), Map.class);
         assertThat(confirm.getStatusCode().is2xxSuccessful()).isTrue();
         return confirm.getBody();
     }
 
     private String getTableName(String token, Number id) {
-        var list = rest().exchange(url("/api/datasets"), HttpMethod.GET,
+        var list = rest().exchange(url("/api/imported-tables"), HttpMethod.GET,
                 new HttpEntity<>(jsonHeaders(token)), java.util.List.class);
         @SuppressWarnings("unchecked")
         var rows = (java.util.List<Map<String, Object>>) list.getBody();
@@ -174,16 +174,16 @@ class DatasetFlowTest {
         };
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", res);
-        var up = rest().postForEntity(url("/api/datasets/upload"),
+        var up = rest().postForEntity(url("/api/imported-tables/upload"),
                 new HttpEntity<>(body, authMultipart(t1)), Map.class);
         String uploadId = (String) up.getBody().get("uploadId");
 
         String t2 = token();
         long dsId2 = extDatasource(t2, "x2" + System.currentTimeMillis());
-        var confirm = rest().postForEntity(url("/api/datasets/confirm"),
+        var confirm = rest().postForEntity(url("/api/imported-tables/confirm"),
                 new HttpEntity<>(Map.of(
                         "uploadId", uploadId,
-                        "name", "越权数据集" + System.currentTimeMillis(),
+                        "name", "越权导入" + System.currentTimeMillis(),
                         "columns", up.getBody().get("columns"),
                         "types", up.getBody().get("types"),
                         "datasourceId", dsId2), jsonHeaders(t2)), Map.class);

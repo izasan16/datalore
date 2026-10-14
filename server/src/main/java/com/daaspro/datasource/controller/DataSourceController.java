@@ -86,6 +86,14 @@ public class DataSourceController {
         return service.listSchemas(id);
     }
 
+    @GetMapping("/{id}/tables/preview")
+    public Map<String, Object> previewTable(@PathVariable Long id,
+                                            @RequestParam(required = false) String schema,
+                                            @RequestParam String table,
+                                            @RequestParam(defaultValue = "100") int limit) {
+        return service.previewTable(id, schema, table, limit);
+    }
+
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(@PathVariable Long id) {
         service.delete(id);

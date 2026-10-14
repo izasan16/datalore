@@ -6,8 +6,8 @@ import WorkspaceLayout from './pages/workspace/Layout';
 import WorkspacePage from './pages/workspace';
 import DatasourcePage from './pages/datasource';
 import DatasourceCreatePage from './pages/datasource/create';
-import DatasetPage from './pages/dataset';
-import DatasetNewPage from './pages/dataset/new';
+import DataManagePage from './pages/datamanage';
+import DataManageNewPage from './pages/datamanage/new';
 import SqlLabPage from './pages/sqllab';
 import ApiPubPage from './pages/apipub';
 import ApiPubNewPage from './pages/apipub/new';
@@ -45,8 +45,8 @@ export default function App() {
         <Route path="/datasource" element={<DatasourcePage />} />
         <Route path="/datasource/new" element={<DatasourceCreatePage />} />
         <Route path="/datasource/:id/edit" element={<DatasourceCreatePage />} />
-        <Route path="/datamanage" element={<DatasetPage />} />
-        <Route path="/datamanage/new" element={<DatasetNewPage />} />
+        <Route path="/datamanage" element={<DataManagePage />} />
+        <Route path="/datamanage/new" element={<DataManageNewPage />} />
         <Route path="/sqllab" element={<SqlLabPage />} />
         <Route path="/apipub" element={<ApiPubPage />} />
         <Route path="/apipub/new" element={<ApiPubNewPage />} />
