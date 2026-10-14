@@ -394,6 +394,30 @@ function LocationStep({
         </Row>
         <Row gutter={16}>
           <Col xs={24} sm={12}>
+            <Form.Item label="Schema" field="schemaName" extra="不选则使用数据源默认 schema">
+              <Select
+                options={schemas}
+                loading={schemaLoading}
+                placeholder="默认 schema"
+                showSearch
+                allowClear
+                onChange={() => {
+                  form.setFieldValue('existingTable', undefined);
+                  if (watchDs) {
+                    setTableLoading(true);
+                    listTables(watchDs, form.getFieldValue('schemaName'))
+                      .then((list) => {
+                        setTables(list.map((t) => ({ label: t.name, value: t.name })));
+                        setTableError(false);
+                      })
+                      .catch(() => setTableError(true))
+                      .finally(() => setTableLoading(false));
+                  }
+                }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
             {mode === 'new' ? (
               <Form.Item
                 label="表名"
@@ -426,30 +450,6 @@ function LocationStep({
                 )}
               </>
             )}
-          </Col>
-          <Col xs={24} sm={12}>
-            <Form.Item label="Schema" field="schemaName" extra="不选则使用数据源默认 schema">
-              <Select
-                options={schemas}
-                loading={schemaLoading}
-                placeholder="默认 schema"
-                showSearch
-                allowClear
-                onChange={() => {
-                  form.setFieldValue('existingTable', undefined);
-                  if (watchDs) {
-                    setTableLoading(true);
-                    listTables(watchDs, form.getFieldValue('schemaName'))
-                      .then((list) => {
-                        setTables(list.map((t) => ({ label: t.name, value: t.name })));
-                        setTableError(false);
-                      })
-                      .catch(() => setTableError(true))
-                      .finally(() => setTableLoading(false));
-                  }
-                }}
-              />
-            </Form.Item>
           </Col>
         </Row>
         <Space style={{ marginTop: 8 }}>
