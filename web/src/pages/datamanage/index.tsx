@@ -367,7 +367,7 @@ export default function DataManagePage() {
   const colOptions = columns.map((c) => ({ label: c.name, value: c.name }));
 
   return (
-    <div className="page-shell">
+    <div className="page-fill" style={{ flexDirection: 'column', gap: 16 }}>
       <div className="page-header">
         <div className="page-header-main">
           <Typography.Title heading={4} style={{ margin: 0 }}>数据管理</Typography.Title>
