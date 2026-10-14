@@ -20,7 +20,7 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
+            return "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '"
                     + esc(schema) + "' AND table_name = '" + esc(table) + "' ORDER BY ordinal_position";
         }
         @Override
@@ -44,7 +44,7 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
+            return "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '"
                     + esc(schema) + "' AND table_name = '"
                     + esc(table) + "' ORDER BY ordinal_position";
         }
@@ -68,7 +68,7 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '"
+            return "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '"
                     + esc(schema) + "' AND table_name = '"
                     + esc(table) + "' ORDER BY ordinal_position";
         }
@@ -93,7 +93,7 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type FROM all_tab_columns WHERE owner = '" + esc(schema)
+            return "SELECT column_name, data_type, nullable FROM all_tab_columns WHERE owner = '" + esc(schema)
                     + "' AND table_name = '" + esc(table) + "' ORDER BY column_id";
         }
         @Override
@@ -102,13 +102,28 @@ public enum JdbcUrls {
                     + "'CTXSYS', 'ORDSYS', 'OUTLN', 'DBSNMP', 'APPQOSSYS', 'OLAPSYS', 'ORDDATA', 'LBACSYS', "
                     + "'DVSYS', 'AUDSYS', 'GSMADMIN_INTERNAL') ORDER BY 1";
         }
-    };
+        @Override
+        public String primaryKeySql(String schema, String table) {
+            return "SELECT cols.column_name FROM all_constraints cons"
+                    + " JOIN all_cons_columns cols ON cons.constraint_name = cols.constraint_name"
+                    + " AND cons.owner = cols.owner"
+                    + " WHERE cons.constraint_type = 'P' AND cons.owner = '"
+                    + esc(schema) + "' AND cons.table_name = '" + esc(table) + "' ORDER BY cols.position";
+        }    };
 
     public abstract String url(String host, int port, String db, String schema);
     public abstract int defaultPort();
     public abstract String listTablesSql(String schema);
     public abstract String listColumnsSql(String schema, String table);
     public abstract String listSchemasSql();
+    /** 主键列查询；information_schema 版本适用于 PG/MySQL/SQL Server，Oracle 自行覆盖。 */
+    public String primaryKeySql(String schema, String table) {
+        return "SELECT kcu.column_name FROM information_schema.table_constraints tc"
+                + " JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name"
+                + " AND tc.table_schema = kcu.table_schema"
+                + " WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = '"
+                + esc(schema) + "' AND tc.table_name = '" + esc(table) + "' ORDER BY kcu.ordinal_position";
+    }
 
     public static JdbcUrls of(String type) {
         return switch (type) {

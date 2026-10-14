@@ -2,6 +2,7 @@ package com.daaspro.datasource.controller;
 
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.service.DataSourceService;
+import com.daaspro.datasource.service.TableDataService;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -15,9 +16,11 @@ import java.util.Map;
 public class DataSourceController {
 
     private final DataSourceService service;
+    private final TableDataService tableDataService;
 
-    public DataSourceController(DataSourceService service) {
+    public DataSourceController(DataSourceService service, TableDataService tableDataService) {
         this.service = service;
+        this.tableDataService = tableDataService;
     }
 
     public record CreateReq(@NotBlank String name, @NotBlank String type, @NotBlank String host,
@@ -86,12 +89,53 @@ public class DataSourceController {
         return service.listSchemas(id);
     }
 
-    @GetMapping("/{id}/tables/preview")
-    public Map<String, Object> previewTable(@PathVariable Long id,
-                                            @RequestParam(required = false) String schema,
-                                            @RequestParam String table,
-                                            @RequestParam(defaultValue = "100") int limit) {
-        return service.previewTable(id, schema, table, limit);
+    /** 数据 Tab：分页 + 筛选 + 排序 + 行标识（PG ctid / 其他库主键）。 */
+    @GetMapping("/{id}/tables/rows")
+    public Map<String, Object> rows(@PathVariable Long id,
+                                    @RequestParam(required = false) String schema,
+                                    @RequestParam String table,
+                                    @RequestParam(defaultValue = "1") int page,
+                                    @RequestParam(defaultValue = "50") int pageSize,
+                                    @RequestParam(required = false) String filters,
+                                    @RequestParam(required = false) String orderBy,
+                                    @RequestParam(required = false) String orderDir) {
+        return tableDataService.rows(id, schema, table, page, pageSize, filters, orderBy, orderDir);
+    }
+
+    /** 数据 Tab 导出：按筛选取最多 1 万行。 */
+    @GetMapping("/{id}/tables/rows/export")
+    public Map<String, Object> exportRows(@PathVariable Long id,
+                                          @RequestParam(required = false) String schema,
+                                          @RequestParam String table,
+                                          @RequestParam(required = false) String filters) {
+        return tableDataService.exportRows(id, schema, table, filters);
+    }
+
+    public record InsertRowReq(String schema, String table, Map<String, String> values) {}
+
+    @PostMapping("/{id}/tables/rows")
+    public Map<String, Object> insertRow(@PathVariable Long id, @RequestBody InsertRowReq req) {
+        tableDataService.insertRow(id, req.schema(), req.table(), req.values());
+        return Map.of("ok", true);
+    }
+
+    public record DeleteRowsReq(String schema, String table, List<String> rowIds) {}
+
+    @DeleteMapping("/{id}/tables/rows")
+    public Map<String, Object> deleteRows(@PathVariable Long id, @RequestBody DeleteRowsReq req) {
+        tableDataService.deleteRows(id, req.schema(), req.table(), req.rowIds());
+        return Map.of("ok", true);
+    }
+
+    public record ColumnDdlReq(String schema, String table, String action,
+                               String column, String newColumn, String type) {}
+
+    /** 字段 Tab：新增/改名/改类型/删除列。 */
+    @PostMapping("/{id}/tables/columns")
+    public Map<String, Object> columnDdl(@PathVariable Long id, @RequestBody ColumnDdlReq req) {
+        tableDataService.columnDdl(id, req.schema(), req.table(), req.action(),
+                req.column(), req.newColumn(), req.type());
+        return Map.of("ok", true);
     }
 
     @DeleteMapping("/{id}")

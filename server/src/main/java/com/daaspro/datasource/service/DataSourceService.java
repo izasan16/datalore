@@ -150,52 +150,16 @@ public class DataSourceService {
         String sql = JdbcUrls.of(ds.getType()).listColumnsSql(schema, table);
         try (var conn = open(ds); var st = conn.prepareStatement(sql); var rs = st.executeQuery()) {
             var rows = new ArrayList<Map<String, String>>();
-            while (rs.next()) rows.add(Map.of("name", rs.getString(1), "type", rs.getString(2)));
+            while (rs.next()) {
+                String nullable = rs.getString(3);
+                String normalized = "YES".equalsIgnoreCase(nullable) || "Y".equalsIgnoreCase(nullable) ? "YES" : "NO";
+                rows.add(Map.of("name", rs.getString(1), "type", rs.getString(2), "nullable", normalized));
+            }
             return rows;
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
             throw new BizException(400, "浏览列失败: " + rootMessage(e));
-        }
-    }
-
-    /** 表数据预览：列结构 + 前 limit 行 + COUNT(*) 行数。只读，标识符严格校验。 */
-    public Map<String, Object> previewTable(Long id, String schemaParam, String table, int limit) {
-        DataSourceEntity ds = getOwned(id);
-        String schema = schemaParam == null || schemaParam.isBlank() ? defaultSchema(ds) : schemaParam.trim();
-        validateIdent(schema, "schema");
-        validateIdent(table, "表名");
-        int capped = Math.max(1, Math.min(limit, 100));
-        String qualified = quoteIdent(ds, schema) + "." + quoteIdent(ds, table);
-        String limitClause = switch (ds.getType()) {
-            case "sqlserver" -> "SELECT TOP " + capped + " * FROM " + qualified;
-            case "oracle" -> "SELECT * FROM " + qualified + " FETCH FIRST " + capped + " ROWS ONLY";
-            default -> "SELECT * FROM " + qualified + " LIMIT " + capped;
-        };
-        try (var conn = open(ds)) {
-            long total;
-            try (var st = conn.prepareStatement("SELECT count(*) FROM " + qualified);
-                 var rs = st.executeQuery()) {
-                total = rs.next() ? rs.getLong(1) : 0;
-            }
-            List<Map<String, String>> columns = new ArrayList<>();
-            List<List<String>> rows = new ArrayList<>();
-            try (var st = conn.createStatement(); var rs = st.executeQuery(limitClause)) {
-                var md = rs.getMetaData();
-                for (int i = 1; i <= md.getColumnCount(); i++) {
-                    columns.add(Map.of("name", md.getColumnLabel(i), "type", md.getColumnTypeName(i)));
-                }
-                while (rs.next()) {
-                    List<String> row = new ArrayList<>();
-                    for (int i = 1; i <= md.getColumnCount(); i++) row.add(rs.getString(i));
-                    rows.add(row);
-                }
-            }
-            return Map.of("columns", columns, "rows", rows, "total", total);
-        } catch (BizException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BizException(400, "预览失败: " + rootMessage(e));
         }
     }
 
