@@ -124,7 +124,7 @@ export default function DataManageNewPage() {
       </div>
 
       <section className="page-section natural-height" style={{ maxWidth: 960, width: '100%', margin: '0 auto' }}>
-        <Steps current={step} style={{ marginBottom: 28 }}>
+        <Steps current={step + 1} style={{ marginBottom: 28 }}>
           <Steps.Step title="选择文件" />
           <Steps.Step title="字段设置" />
           <Steps.Step title="入库位置" />
@@ -213,12 +213,12 @@ function PreviewBlock({ result }: { result: ParseResult }) {
           data={result.previewRows.map((row, i) => ({ __i: i, row }))}
           rowKey="__i"
           size="default"
-          pagination={{ pageSize: 10 }}
+          pagination={false}
           columns={previewColumns(result) as any}
         />
       </div>
       <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
-        仅展示前 {result.previewRows.length} 行预览
+        预览前 {result.previewRows.length} 行
       </Typography.Text>
     </div>
   );
@@ -361,14 +361,19 @@ function LocationStep({
       >
         <Row gutter={16}>
           <Col xs={24} sm={12}>
-            <Form.Item
-              label="名称"
-              field="name"
-              rules={mode === 'append' ? [] : [{ required: true, message: '请输入名称' }]}
-              extra={mode === 'append' ? '追加到已有导入表，将更新其行数，无需新名称' : undefined}
-            >
-              <Input placeholder="如：销售明细" disabled={mode === 'append'} />
-            </Form.Item>
+            {mode === 'new' && (
+              <Form.Item
+                label="表名"
+                field="name"
+                rules={[
+                  { required: true, message: '请输入表名' },
+                  { match: /^[A-Za-z_][A-Za-z0-9_]*$/, message: '仅字母、数字、下划线，且以字母或下划线开头' },
+                ]}
+                extra="将作为数据库中的物理表名"
+              >
+                <Input placeholder="如：sales_detail" />
+              </Form.Item>
+            )}
             <Form.Item label="导入方式" field="mode">
               <Select
                 onChange={(v) => setMode(v as 'new' | 'append')}

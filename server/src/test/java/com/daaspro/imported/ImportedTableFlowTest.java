@@ -91,7 +91,7 @@ class ImportedTableFlowTest {
         var confirm = rest().postForEntity(url("/api/imported-tables/confirm"),
                 new HttpEntity<>(Map.of(
                         "uploadId", up.getBody().get("uploadId"),
-                        "name", "演示导入" + System.currentTimeMillis(),
+                        "name", "demo_import_" + System.currentTimeMillis(),
                         "fileName", "demo.csv",
                         "columns", up.getBody().get("columns"),
                         "types", up.getBody().get("types"),
@@ -120,12 +120,12 @@ class ImportedTableFlowTest {
         long dsId = extDatasource(token, "ap" + System.currentTimeMillis());
         // 第一次上传导入建表
         String csv1 = "名称,数量\n甲,10\n乙,20\n";
-        Map<String, Object> first = doImport(token, csv1, "追加测试" + System.currentTimeMillis(), null, dsId);
+        Map<String, Object> first = doImport(token, csv1, "append_test_" + System.currentTimeMillis(), null, dsId);
         String table = (String) first.get("tableName");
 
         // 第二次同结构文件追加：应合并进第一个数据集（不新建记录，避免共享物理表被连坐删除）
         String csv2 = "名称,数量\n丙,30\n";
-        Map<String, Object> second = doImport(token, csv2, "追加批次" + System.currentTimeMillis(), table, dsId);
+        Map<String, Object> second = doImport(token, csv2, "ignored" + System.currentTimeMillis(), table, dsId);
         assertThat(((Number) second.get("id")).longValue()).isEqualTo(((Number) first.get("id")).longValue());
 
         // 预览第一批：表里现在应该有 3 行（preview LIMIT 20 覆盖全部）
@@ -183,7 +183,7 @@ class ImportedTableFlowTest {
         var confirm = rest().postForEntity(url("/api/imported-tables/confirm"),
                 new HttpEntity<>(Map.of(
                         "uploadId", uploadId,
-                        "name", "越权导入" + System.currentTimeMillis(),
+                        "name", "cross_tenant_" + System.currentTimeMillis(),
                         "columns", up.getBody().get("columns"),
                         "types", up.getBody().get("types"),
                         "datasourceId", dsId2), jsonHeaders(t2)), Map.class);

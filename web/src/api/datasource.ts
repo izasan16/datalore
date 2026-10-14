@@ -113,6 +113,26 @@ export function alterColumn(id: number, schema: string | undefined, table: strin
   return http.post(`/datasources/${id}/tables/columns`, { schema, table, action, ...payload }).then((r) => r.data);
 }
 
+export interface TableRef {
+  type: 'etl_source' | 'etl_target' | 'api_pub' | 'imported';
+  id: number;
+  name: string;
+  running?: boolean;
+  enabled?: boolean;
+}
+
+export function tableRefs(id: number, schema: string | undefined, table: string) {
+  const params: Record<string, unknown> = { table };
+  if (schema) params.schema = schema;
+  return http.get<TableRef[]>(`/datasources/${id}/tables/refs`, { params }).then((r) => r.data);
+}
+
+export function deleteTable(id: number, schema: string | undefined, table: string, force: boolean) {
+  const params: Record<string, unknown> = { table, force };
+  if (schema) params.schema = schema;
+  return http.delete(`/datasources/${id}/tables`, { params }).then((r) => r.data);
+}
+
 export const STD_COLUMN_TYPES = [
   { label: 'bigint（整数）', value: 'bigint' },
   { label: 'numeric（数值）', value: 'numeric' },

@@ -46,9 +46,12 @@ class ImportedTableImportTest {
         var ctx = setup();
         var up = ImportedTableService.upload(csv());
         var created = ImportedTableService.confirm(new ImportedTableService.ConfirmReq(
-                up.uploadId(), "导入订单" + ctx.slug(), "orders.csv", up.columns(), up.types(), ctx.dsId(), null, null));
+                up.uploadId(), "orders_" + ctx.slug(), "orders.csv", up.columns(), up.types(), ctx.dsId(), null, null));
         assertThat(created.getRowCount()).isEqualTo(3);
         assertThat(created.getDatasourceId()).isEqualTo(ctx.dsId());
+        // 名称即物理表名
+        assertThat(created.getName()).isEqualTo(created.getTableName());
+        assertThat(created.getTableName()).isEqualTo("orders_" + ctx.slug());
 
         var preview = ImportedTableService.preview(created.getId());
         assertThat(preview.rows()).hasSize(3);
@@ -66,11 +69,36 @@ class ImportedTableImportTest {
     }
 
     @Test
+    void rejectsInvalidAndDuplicatePhysicalNames() {
+        var ctx = setup();
+        var up = ImportedTableService.upload(csv());
+        // 非法标识符
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ImportedTableService.confirm(
+                        new ImportedTableService.ConfirmReq(up.uploadId(), "非法表名", "orders.csv",
+                                up.columns(), up.types(), ctx.dsId(), null, null)))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("表名");
+        // 物理重名
+        ImportedTableService.confirm(new ImportedTableService.ConfirmReq(
+                up.uploadId(), "orders_dup_" + ctx.slug(), "orders.csv", up.columns(), up.types(), ctx.dsId(), null, null));
+        var up2 = ImportedTableService.upload(csv());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ImportedTableService.confirm(
+                        new ImportedTableService.ConfirmReq(up2.uploadId(), "orders_dup_" + ctx.slug(), "orders.csv",
+                                up2.columns(), up2.types(), ctx.dsId(), null, null)))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("表已存在");
+        var created = ImportedTableService.confirm(new ImportedTableService.ConfirmReq(
+                up2.uploadId(), "orders_dup2_" + ctx.slug(), "orders.csv", up2.columns(), up2.types(), ctx.dsId(), null, null));
+        ImportedTableService.delete(created.getId());
+        ImportedTableService.delete(created.getId() - 1);
+    }
+
+    @Test
     void datasourceIdRequired() {
         var ctx = setup();
         var up = ImportedTableService.upload(csv());
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> ImportedTableService.confirm(
-                        new ImportedTableService.ConfirmReq(up.uploadId(), "无源导入", "orders.csv",
+                        new ImportedTableService.ConfirmReq(up.uploadId(), "no_ds_" + ctx.slug(), "orders.csv",
                                 up.columns(), up.types(), null, null, null)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("请选择目标数据源");

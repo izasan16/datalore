@@ -98,6 +98,9 @@ public class ImportedTableService {
         if (!append0 && (req.name() == null || req.name().isBlank())) {
             throw new BizException(400, "名称不能为空");
         }
+        if (!append0 && !req.name().trim().matches("^[A-Za-z_][A-Za-z0-9_]*$")) {
+            throw new BizException(400, "表名只能包含字母、数字、下划线，且以字母或下划线开头");
+        }
         String schema = req.schemaName() == null || req.schemaName().isBlank() ? null : req.schemaName().trim();
 
         DataSourceEntity target;
@@ -107,13 +110,6 @@ public class ImportedTableService {
             target = dataSourceService.getOwned(req.datasourceId());
         }
         boolean append = req.existingTable() != null && !req.existingTable().isBlank();
-
-        if (!append) {
-            Long dup = mapper.selectCount(new LambdaQueryWrapper<ImportedTableEntity>()
-                    .eq(ImportedTableEntity::getTenantId, TenantContext.requireTenantId())
-                    .eq(ImportedTableEntity::getName, req.name()));
-            if (dup > 0) throw new BizException(400, "同名导入已存在");
-        }
 
         byte[] csv = download(req.uploadId());
         String table;
@@ -145,12 +141,14 @@ public class ImportedTableService {
             throw new BizException(400, "目标表不是本平台导入的表，无法以追加方式管理");
         }
 
-        table = "d_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        table = req.name().trim();
+        List<Map<String, String>> existingPhysical = tableColumns(target, table, schema);
+        if (!existingPhysical.isEmpty()) throw new BizException(400, "表已存在: " + table);
         copyCount = createTableAndInsert(target, schema, table, columns, types, csv);
 
         ImportedTableEntity rec = new ImportedTableEntity();
         rec.setTenantId(TenantContext.requireTenantId());
-        rec.setName(req.name());
+        rec.setName(table);
         rec.setTableName(table);
         rec.setSchemaName(schema);
         rec.setDatasourceId(target.getId());

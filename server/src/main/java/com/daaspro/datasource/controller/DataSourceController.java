@@ -3,7 +3,9 @@ package com.daaspro.datasource.controller;
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.service.DataSourceService;
 import com.daaspro.datasource.service.TableDataService;
+import com.daaspro.datasource.service.TableDeleteService;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +19,13 @@ public class DataSourceController {
 
     private final DataSourceService service;
     private final TableDataService tableDataService;
+    private final TableDeleteService tableDeleteService;
 
-    public DataSourceController(DataSourceService service, TableDataService tableDataService) {
+    public DataSourceController(DataSourceService service, TableDataService tableDataService,
+                                TableDeleteService tableDeleteService) {
         this.service = service;
         this.tableDataService = tableDataService;
+        this.tableDeleteService = tableDeleteService;
     }
 
     public record CreateReq(@NotBlank String name, @NotBlank String type, @NotBlank String host,
@@ -136,6 +141,30 @@ public class DataSourceController {
         tableDataService.columnDdl(id, req.schema(), req.table(), req.action(),
                 req.column(), req.newColumn(), req.type());
         return Map.of("ok", true);
+    }
+
+    /** 删表引用检查：ETL 表输入/目标、API 发布、导入记录。 */
+    @GetMapping("/{id}/tables/refs")
+    public List<Map<String, Object>> tableRefs(@PathVariable Long id,
+                                               @RequestParam(required = false) String schema,
+                                               @RequestParam String table) {
+        return tableDeleteService.refs(id, schema, table);
+    }
+
+    /** 删表：force=false 时有引用返回 409 + 引用明细。 */
+    @DeleteMapping("/{id}/tables")
+    public ResponseEntity<Map<String, Object>> deleteTable(@PathVariable Long id,
+                                                           @RequestParam(required = false) String schema,
+                                                           @RequestParam String table,
+                                                           @RequestParam(defaultValue = "false") boolean force) {
+        var refs = tableDeleteService.refs(id, schema, table);
+        if (!refs.isEmpty() && !force) {
+            return ResponseEntity.status(409).body(Map.of(
+                    "message", "该表被以下资源引用，强制删除后这些资源将无法正常工作",
+                    "refs", refs));
+        }
+        tableDeleteService.drop(id, schema, table);
+        return ResponseEntity.ok(Map.of("deleted", true));
     }
 
     @DeleteMapping("/{id}")

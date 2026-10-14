@@ -7,9 +7,9 @@ import { IconDelete, IconDownload, IconPlus, IconRefresh, IconSearch } from '@ar
 import {
   alterColumn, ColumnInfo, DataSourceInfo, deleteRows, exportRows, FILTER_OPS, insertRow,
   listColumns, listDatasources, listRows, listSchemas, listTables,
-  STD_COLUMN_TYPES, TableFilter, TableRowsResult,
+  STD_COLUMN_TYPES, TableFilter, TableRef, TableRowsResult, tableRefs, deleteTable,
 } from '../../api/datasource';
-import { ImportedTableInfo, deleteImported, listImported } from '../../api/imported';
+import { ImportedTableInfo, listImported } from '../../api/imported';
 
 type RowRec = { __rid: string; row: string[] };
 
@@ -49,6 +49,9 @@ export default function DataManagePage() {
   const [typeValue, setTypeValue] = useState('text');
   const [dropTarget, setDropTarget] = useState<ColumnInfo | null>(null);
   const [dropAck, setDropAck] = useState(false);
+  const [deleteRefs, setDeleteRefs] = useState<TableRef[] | null>(null);
+  const [deleteAck, setDeleteAck] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadDatasources = useCallback(async () => {
     try {
@@ -172,33 +175,52 @@ export default function DataManagePage() {
       && (!r.schemaName || r.schemaName === schema));
   }
 
-  function importedRecord(dsId: number, table: string) {
-    return imported.find((r) => r.datasourceId === dsId && r.tableName === table);
+  function afterTableDeleted() {
+    if (!selected) return;
+    Message.success('已删除');
+    setSelected(null);
+    setTablesBySchema((prev) => {
+      const key = `sc-${selected.dsId}-${selected.schema}`;
+      return { ...prev, [key]: (prev[key] || []).filter((t) => t.name !== selected.table) };
+    });
+    loadImported();
   }
 
-  function onDeleteImported() {
+  async function onDeleteTable() {
     if (!selected) return;
-    const rec = importedRecord(selected.dsId, selected.table);
-    if (!rec) return;
-    Modal.confirm({
-      title: '删除导入表',
-      content: `确定删除「${rec.name}」吗？数据库中的表 ${selected.schema}.${selected.table} 将一并删除，该操作不可恢复。`,
-      okButtonProps: { status: 'danger' },
-      onOk: async () => {
-        try {
-          await deleteImported(rec.id);
-          Message.success('已删除');
-          setSelected(null);
-          setTablesBySchema((prev) => {
-            const key = `sc-${selected.dsId}-${selected.schema}`;
-            return { ...prev, [key]: (prev[key] || []).filter((t) => t.name !== selected.table) };
-          });
-          loadImported();
-        } catch (e: any) {
-          Message.error(e.response?.data?.message || '删除失败');
-        }
-      },
-    });
+    try {
+      const refs = await tableRefs(selected.dsId, selected.schema, selected.table);
+      if (refs.length === 0) {
+        Modal.confirm({
+          title: '删除表',
+          content: `确定删除 ${selected.schema}.${selected.table} 吗？该操作不可恢复。`,
+          okButtonProps: { status: 'danger' },
+          onOk: async () => {
+            await deleteTable(selected.dsId, selected.schema, selected.table, false);
+            afterTableDeleted();
+          },
+        });
+      } else {
+        setDeleteRefs(refs);
+        setDeleteAck(false);
+      }
+    } catch (e: any) {
+      Message.error(e.response?.data?.message || '引用检查失败');
+    }
+  }
+
+  async function forceDeleteTable() {
+    if (!selected) return;
+    setDeleteLoading(true);
+    try {
+      await deleteTable(selected.dsId, selected.schema, selected.table, true);
+      setDeleteRefs(null);
+      afterTableDeleted();
+    } catch (e: any) {
+      Message.error(e.response?.data?.message || '删除失败');
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   async function handleLoadMore(node: any) {
@@ -342,8 +364,6 @@ export default function DataManagePage() {
     }) : undefined,
   }));
 
-  const selectedImported = selected ? importedRecord(selected.dsId, selected.table) : undefined;
-
   const dataColumns = (rowsResult?.columns || []).map((c) => ({
     title: c.name,
     dataIndex: c.name,
@@ -421,9 +441,7 @@ export default function DataManagePage() {
             <Typography.Title heading={6} style={{ margin: 0 }}>
               {selected ? `${selected.dsName} · ${selected.schema}.${selected.table}` : '表详情'}
             </Typography.Title>
-            {selectedImported && (
-              <Button size="mini" status="danger" icon={<IconDelete />} onClick={onDeleteImported}>删除表</Button>
-            )}
+            <Button size="small" status="danger" icon={<IconDelete />} onClick={onDeleteTable}>删除表</Button>
           </div>
 
           {!selected ? (
@@ -623,6 +641,40 @@ export default function DataManagePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Typography.Text>确定删除字段「{dropTarget?.name}」吗？该列数据将全部丢失且不可恢复。</Typography.Text>
           <Checkbox checked={dropAck} onChange={(v: boolean) => setDropAck(v)}>我已知晓该列数据将丢失</Checkbox>
+        </div>
+      </Modal>
+
+      <Modal
+        title="该表被以下资源引用"
+        visible={!!deleteRefs}
+        confirmLoading={deleteLoading}
+        okText="强制删除"
+        okButtonProps={{ status: 'danger', disabled: !deleteAck }}
+        onOk={forceDeleteTable}
+        onCancel={() => setDeleteRefs(null)}
+        unmountOnExit
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {(deleteRefs || []).map((r, i) => (
+            <Space key={i} size={6}>
+              <Tag size="small" color={
+                r.type === 'api_pub' ? 'blue' : r.type === 'imported' ? 'green' : 'orange'
+              }>
+                {r.type === 'etl_source' ? 'ETL 源表'
+                  : r.type === 'etl_target' ? 'ETL 目标表'
+                  : r.type === 'api_pub' ? 'API 发布' : '导入表'}
+              </Tag>
+              <Typography.Text>{r.name}</Typography.Text>
+              {r.running && <Tag size="small" color="red">运行中</Tag>}
+              {r.enabled && <Tag size="small" color="cyan">启用中</Tag>}
+            </Space>
+          ))}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            强制删除后，上述资源将无法正常工作，访问时报数据库错误。
+          </Typography.Text>
+          <Checkbox checked={deleteAck} onChange={(v: boolean) => setDeleteAck(v)}>
+            我已知晓删除后上述资源将无法正常工作
+          </Checkbox>
         </div>
       </Modal>
     </div>
