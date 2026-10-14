@@ -352,7 +352,6 @@ export default function DataManagePage() {
       ? (sort.orderDir === 'desc' ? 'descend' : 'ascend') as 'ascend' | 'descend' | undefined
       : undefined,
     ellipsis: true,
-    width: 150,
     render: (_: unknown, record: RowRec) => {
       const idx = (rowsResult?.columns || []).findIndex((x) => x.name === c.name);
       return record.row[idx] ?? '';
@@ -436,13 +435,13 @@ export default function DataManagePage() {
               <Tabs.TabPane key="data" title="数据">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', minHeight: 0 }}>
                   <Space wrap size={8}>
-                    <Button size="mini" type="primary" icon={<IconPlus />} onClick={() => { setInsertValues({}); setInsertVisible(true); }}>
+                    <Button size="small" type="primary" icon={<IconPlus />} onClick={() => { setInsertValues({}); setInsertVisible(true); }}>
                       新增行
                     </Button>
-                    <Button size="mini" status="danger" icon={<IconDelete />} disabled={!rowsResult?.deletable || selectedRowKeys.length === 0} onClick={handleDeleteRows}>
+                    <Button size="small" status="danger" icon={<IconDelete />} disabled={!rowsResult?.deletable || selectedRowKeys.length === 0} onClick={handleDeleteRows}>
                       删除选中{selectedRowKeys.length > 0 ? `（${selectedRowKeys.length}）` : ''}
                     </Button>
-                    <Button size="mini" icon={<IconDownload />} onClick={handleExport}>导出 CSV</Button>
+                    <Button size="small" icon={<IconDownload />} onClick={handleExport}>导出 CSV</Button>
                     {rowsResult && !rowsResult.deletable && (
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>{rowsResult.deleteReason}</Typography.Text>
                     )}
@@ -451,18 +450,18 @@ export default function DataManagePage() {
                   <div style={{ border: '1px solid var(--color-border-2)', borderRadius: 4, padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {filters.map((f, idx) => (
                       <Space key={idx} size={6}>
-                        <Select size="mini" value={f.col} options={colOptions} style={{ width: 140 }} onChange={(v: string) => updateFilter(idx, { col: v })} />
-                        <Select size="mini" value={f.op} options={FILTER_OPS as any} style={{ width: 110 }} onChange={(v: any) => updateFilter(idx, { op: v })} />
+                        <Select size="small" value={f.col} options={colOptions} style={{ width: 150 }} onChange={(v: string) => updateFilter(idx, { col: v })} />
+                        <Select size="small" value={f.op} options={FILTER_OPS as any} style={{ width: 120 }} onChange={(v: any) => updateFilter(idx, { op: v })} />
                         {f.op !== 'isnull' && f.op !== 'notnull' && (
-                          <Input size="mini" value={f.value} style={{ width: 150 }} placeholder="值" onChange={(v: string) => updateFilter(idx, { value: v })} />
+                          <Input size="small" value={f.value} style={{ width: 160 }} placeholder="值" onChange={(v: string) => updateFilter(idx, { value: v })} />
                         )}
-                        <Button size="mini" icon={<IconDelete />} onClick={() => removeFilter(idx)} />
+                        <Button size="small" icon={<IconDelete />} onClick={() => removeFilter(idx)} />
                       </Space>
                     ))}
                     <Space size={6}>
-                      <Button size="mini" icon={<IconPlus />} onClick={addFilter}>添加条件</Button>
-                      <Button size="mini" type="primary" icon={<IconSearch />} onClick={() => { setPageNo(1); setAppliedFilters(filters); }}>查询</Button>
-                      <Button size="mini" onClick={() => { setFilters([]); setAppliedFilters([]); setPageNo(1); }}>重置</Button>
+                      <Button size="small" icon={<IconPlus />} onClick={addFilter}>添加条件</Button>
+                      <Button size="small" type="primary" icon={<IconSearch />} onClick={() => { setPageNo(1); setAppliedFilters(filters); }}>查询</Button>
+                      <Button size="small" onClick={() => { setFilters([]); setAppliedFilters([]); setPageNo(1); }}>重置</Button>
                     </Space>
                   </div>
 
@@ -470,7 +469,7 @@ export default function DataManagePage() {
                     loading={rowsLoading}
                     data={tableRows}
                     rowKey="__rid"
-                    size="mini"
+                    size="default"
                     border={{ cell: true }}
                     scroll={{ x: '100%' }}
                     rowSelection={{
@@ -483,7 +482,7 @@ export default function DataManagePage() {
                       pageSize,
                       current: pageNo,
                       showTotal: true,
-                      size: 'mini',
+                      size: 'default',
                       onChange: (p: number) => setPageNo(p),
                     }}
                     onChange={onTableChange as any}
@@ -495,7 +494,7 @@ export default function DataManagePage() {
               <Tabs.TabPane key="fields" title="字段">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <Space>
-                    <Button size="mini" type="primary" icon={<IconPlus />} onClick={() => { setAddFieldName(''); setAddFieldType('text'); setAddFieldVisible(true); }}>
+                    <Button size="small" type="primary" icon={<IconPlus />} onClick={() => { setAddFieldName(''); setAddFieldType('text'); setAddFieldVisible(true); }}>
                       新增字段
                     </Button>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>改类型 / 删除字段会立即修改数据库表结构，请谨慎操作</Typography.Text>
@@ -504,7 +503,7 @@ export default function DataManagePage() {
                     loading={columnsLoading}
                     data={columns}
                     rowKey="name"
-                    size="mini"
+                    size="default"
                     pagination={false}
                     columns={[
                       { title: '列名', dataIndex: 'name' },
@@ -514,9 +513,9 @@ export default function DataManagePage() {
                         title: '操作', width: 220,
                         render: (_: unknown, c: ColumnInfo) => (
                           <Space size={4}>
-                            <Button size="mini" onClick={() => { setRenameTarget(c); setRenameValue(c.name); }}>改名</Button>
-                            <Button size="mini" onClick={() => { setTypeTarget(c); setTypeValue('text'); }}>改类型</Button>
-                            <Button size="mini" status="danger" onClick={() => { setDropTarget(c); setDropAck(false); }}>删除</Button>
+                            <Button size="small" onClick={() => { setRenameTarget(c); setRenameValue(c.name); }}>改名</Button>
+                            <Button size="small" onClick={() => { setTypeTarget(c); setTypeValue('text'); }}>改类型</Button>
+                            <Button size="small" status="danger" onClick={() => { setDropTarget(c); setDropAck(false); }}>删除</Button>
                           </Space>
                         ),
                       },
