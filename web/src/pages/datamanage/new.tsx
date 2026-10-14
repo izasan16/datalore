@@ -400,7 +400,7 @@ function LocationStep({
                 field="name"
                 rules={[
                   { required: true, message: '请输入表名' },
-                  { match: /^[A-Za-z_][A-Za-z0-9_]*$/, message: '仅字母、数字、下划线，且以字母或下划线开头' },
+                  { match: /^[\p{L}_][\p{L}\p{N}_]{0,62}$/u, message: '支持中英文、数字、下划线，须以中文、字母或下划线开头，不超过 63 个字符' },
                 ]}
                 extra="将作为数据库中的物理表名"
               >

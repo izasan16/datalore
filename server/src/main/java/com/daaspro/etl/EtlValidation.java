@@ -122,7 +122,7 @@ public final class EtlValidation {
             String name = head[0];
             String remainder = head[1];
             if (name.startsWith("\"")) name = unquote(name);
-            else if (!name.matches("(?i)[A-Za-z_][A-Za-z0-9_$]*")) throw new BizException(400, "字段名不合法: " + name);
+            else if (!name.matches("(?i)[\\p{L}_][\\p{L}\\p{N}_$]*")) throw new BizException(400, "字段名不合法: " + name);
             if (CONSTRAINT_KEYWORDS.contains(name.toUpperCase(Locale.ROOT))) continue;
             if (remainder.isBlank()) throw new BizException(400, "字段缺少类型: " + name);
             String[] typeParts = firstToken(remainder);

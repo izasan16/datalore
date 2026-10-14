@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 @Service
 public class TableDataService {
 
-    private static final Pattern IDENT = Pattern.compile("^[A-Za-z_][A-Za-z0-9_$]*$");
+    private static final Pattern IDENT = Pattern.compile("^[\\p{L}_][\\p{L}\\p{N}_$]{0,62}$");
     private static final Set<String> OPS = Set.of("eq", "ne", "like", "gt", "gte", "lt", "lte", "isnull", "notnull");
     private static final Set<String> STD_TYPES = Set.of("bigint", "numeric", "text", "timestamp", "date", "boolean");
     private static final int MAX_ROW_IDS = 500;

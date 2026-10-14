@@ -98,7 +98,7 @@ public class ImportedTableService {
         if (!append0 && (req.name() == null || req.name().isBlank())) {
             throw new BizException(400, "名称不能为空");
         }
-        if (!append0 && !req.name().trim().matches("^[A-Za-z_][A-Za-z0-9_]*$")) {
+        if (!append0 && !req.name().trim().matches("^[\\p{L}_][\\p{L}\\p{N}_]{0,62}$")) {
             throw new BizException(400, "表名只能包含字母、数字、下划线，且以字母或下划线开头");
         }
         String schema = req.schemaName() == null || req.schemaName().isBlank() ? null : req.schemaName().trim();

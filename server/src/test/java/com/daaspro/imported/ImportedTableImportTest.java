@@ -69,12 +69,26 @@ class ImportedTableImportTest {
     }
 
     @Test
+    void chinesePhysicalTableNameAccepted() {
+        var ctx = setup();
+        var up = ImportedTableService.upload(csv());
+        var created = ImportedTableService.confirm(new ImportedTableService.ConfirmReq(
+                up.uploadId(), "中文表_" + ctx.slug(), "orders.csv",
+                up.columns(), up.types(), ctx.dsId(), null, null));
+        assertThat(created.getRowCount()).isEqualTo(3);
+        assertThat(created.getName()).isEqualTo(created.getTableName());
+        var preview = ImportedTableService.preview(created.getId());
+        assertThat(preview.rows()).hasSize(3);
+        ImportedTableService.delete(created.getId());
+    }
+
+    @Test
     void rejectsInvalidAndDuplicatePhysicalNames() {
         var ctx = setup();
         var up = ImportedTableService.upload(csv());
         // 非法标识符
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> ImportedTableService.confirm(
-                        new ImportedTableService.ConfirmReq(up.uploadId(), "非法表名", "orders.csv",
+                        new ImportedTableService.ConfirmReq(up.uploadId(), "bad name", "orders.csv",
                                 up.columns(), up.types(), ctx.dsId(), null, null)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("表名");

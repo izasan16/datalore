@@ -156,7 +156,7 @@ public class TableDeleteService {
     }
 
     private void validateIdent(String value, String label) {
-        if (value == null || !value.matches("^[A-Za-z_][A-Za-z0-9_$]*$")) {
+        if (value == null || !value.matches("^[\\p{L}_][\\p{L}\\p{N}_$]{0,62}$")) {
             throw new BizException(400, label + "非法: " + value);
         }
     }

@@ -163,7 +163,7 @@ public class DataSourceService {
         }
     }
 
-    private static final java.util.regex.Pattern IDENT = java.util.regex.Pattern.compile("^[A-Za-z_][A-Za-z0-9_$]*$");
+    private static final java.util.regex.Pattern IDENT = java.util.regex.Pattern.compile("^[\\p{L}_][\\p{L}\\p{N}_$]{0,62}$");
 
     private void validateIdent(String value, String label) {
         if (value == null || !IDENT.matcher(value).matches()) {
