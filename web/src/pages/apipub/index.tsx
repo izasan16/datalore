@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Table, Tag, Typography } from '@arco-design/web-react';
+import { Button, Message, Modal, Table, Tag, Typography } from '@arco-design/web-react';
 import { IconPlus, IconRefresh } from '@arco-design/web-react/icon';
-import { ApiPubInfo, listApis } from '../../api/apipub';
+import { ApiPubInfo, deleteApi, listApis } from '../../api/apipub';
 
 export default function ApiPubPage() {
   const nav = useNavigate();
@@ -26,6 +26,24 @@ export default function ApiPubPage() {
     reload();
   }, [reload]);
 
+  function onDelete(row: ApiPubInfo) {
+    Modal.confirm({
+      title: '删除 API',
+      content: `确定删除「${row.name}」吗？调用方将无法再访问该接口。该操作不可恢复。`,
+      okText: '删除',
+      okButtonProps: { status: 'danger' },
+      onOk: async () => {
+        try {
+          await deleteApi(row.id);
+          Message.success('已删除');
+          reload();
+        } catch (e: any) {
+          Message.error(e.response?.data?.message || '删除失败');
+        }
+      },
+    });
+  }
+
   return (
     <div className="page-shell">
       <div className="page-header">
@@ -34,12 +52,11 @@ export default function ApiPubPage() {
             API 发布
           </Typography.Title>
           <Typography.Text type="secondary">
-            把数据源中的表发布为只读 REST API，外部应用通过 AppKey/Secret 调用 GET /api/open/{'{path}'}
+            把数据表或 SQL 查询发布为只读 REST API，调用方通过独立 Key/Secret 调用 GET /api/open/{'{path}'}
           </Typography.Text>
         </div>
         <div className="page-header-actions">
           <Button size="mini" icon={<IconRefresh />} onClick={reload}>刷新</Button>
-          <Button size="mini" onClick={() => nav('/apipub/apps')}>应用管理</Button>
           <Button size="mini" type="primary" icon={<IconPlus />} onClick={() => nav('/apipub/new')}>
             新建发布
           </Button>
@@ -78,9 +95,13 @@ export default function ApiPubPage() {
                 render: (_, r) => <Link to={`/apipub/${r.id}`}>{r.name}</Link>,
               },
               { title: '路径', dataIndex: 'path', render: (p: string) => <code>/api/open/{p}</code> },
-              { title: '数据表', render: (_: unknown, row: ApiPubInfo) => `${row.datasourceName} · ${row.schemaName ? `${row.schemaName}.` : ''}${row.tableName}` },
-              { title: '暴露列数', dataIndex: 'columns', render: (c: string[]) => c.length },
-              { title: '授权应用', dataIndex: 'grantCount' },
+              {
+                title: '来源',
+                render: (_: unknown, row: ApiPubInfo) =>
+                  row.sourceType === 'SQL'
+                    ? `${row.datasourceName} · SQL`
+                    : `${row.datasourceName} · ${row.schemaName ? `${row.schemaName}.` : ''}${row.tableName}`,
+              },
               { title: '行数上限', dataIndex: 'maxRows' },
               {
                 title: '状态',
@@ -94,11 +115,13 @@ export default function ApiPubPage() {
               },
               {
                 title: '操作',
-                width: 90,
+                width: 170,
                 render: (_, r) => (
-                  <Button type="text" size="mini" onClick={() => nav(`/apipub/${r.id}`)}>
-                    管理
-                  </Button>
+                  <Button.Group>
+                    <Button type="text" size="mini" onClick={() => nav(`/apipub/${r.id}`)}>查看</Button>
+                    <Button type="text" size="mini" onClick={() => nav(`/apipub/${r.id}/edit`)}>编辑</Button>
+                    <Button type="text" size="mini" status="danger" onClick={() => onDelete(r)}>删除</Button>
+                  </Button.Group>
                 ),
               },
             ]}
@@ -108,3 +131,4 @@ export default function ApiPubPage() {
     </div>
   );
 }
+

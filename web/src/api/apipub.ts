@@ -1,27 +1,52 @@
 import { http } from './http';
 
+export type ApiSourceType = 'TABLE' | 'SQL';
+
+export interface ApiParamDef {
+  name: string;
+  type: 'string' | 'number';
+  required: boolean;
+  defaultValue?: string;
+}
+
 export interface ApiPubInfo {
   id: number;
   name: string;
   path: string;
+  sourceType: ApiSourceType;
   datasourceId: number;
   datasourceName: string;
   schemaName: string;
   tableName: string;
+  sqlText?: string;
+  params?: ApiParamDef[];
   columns: string[];
   filterColumns: string[];
   maxRows: number;
   status: number;
-  grantCount: number;
+  apiKey?: string;
   updatedAt: string;
 }
 
-export interface ApiAppInfo {
-  id: number;
+export interface ApiCredential {
+  apiKey: string;
+  apiSecret: string | null;
+  secretSet: boolean;
+}
+
+export interface ApiPubPayload {
   name: string;
-  appKey: string;
-  secretMask: string;
-  createdAt: string;
+  path: string;
+  sourceType: ApiSourceType;
+  datasourceId: number;
+  schemaName?: string;
+  tableName?: string;
+  columns?: string[];
+  filterColumns?: string[];
+  sqlText?: string;
+  params?: ApiParamDef[];
+  maxRows?: number;
+  status?: number;
 }
 
 export interface ColumnDef {
@@ -37,17 +62,11 @@ export function getApi(id: number) {
   return http.get<ApiPubInfo>(`/apipubs/${id}`).then((r) => r.data);
 }
 
-export function createApi(payload: {
-  name: string; path: string; datasourceId: number; schemaName?: string; tableName: string; columns: string[];
-  filterColumns: string[]; maxRows?: number;
-}) {
+export function createApi(payload: ApiPubPayload) {
   return http.post<ApiPubInfo>('/apipubs', payload).then((r) => r.data);
 }
 
-export function updateApi(id: number, payload: {
-  name?: string; columns?: string[]; filterColumns?: string[];
-  maxRows?: number; status?: number;
-}) {
+export function updateApi(id: number, payload: Partial<ApiPubPayload>) {
   return http.put<ApiPubInfo>(`/apipubs/${id}`, payload).then((r) => r.data);
 }
 
@@ -55,31 +74,10 @@ export function deleteApi(id: number) {
   return http.delete(`/apipubs/${id}`).then((r) => r.data);
 }
 
-export function getApiGrants(id: number) {
-  return http.get<{ appIds: number[] }>(`/apipubs/${id}/grants`).then((r) => r.data.appIds);
+export function getCredential(id: number) {
+  return http.get<ApiCredential>(`/apipubs/${id}/credential`).then((r) => r.data);
 }
 
-export function setApiGrants(id: number, appIds: number[]) {
-  return http.put(`/apipubs/${id}/grants`, { appIds }).then((r) => r.data);
-}
-
-export function listApps() {
-  return http.get<ApiAppInfo[]>('/apiapps').then((r) => r.data);
-}
-
-export function createApp(name: string) {
-  return http.post<{ id: number; appKey: string; appSecret: string }>('/apiapps', { name })
-    .then((r) => r.data);
-}
-
-export function revealAppSecret(id: number) {
-  return http.get<{ appSecret: string }>(`/apiapps/${id}/secret`).then((r) => r.data.appSecret);
-}
-
-export function updateApp(id: number, name: string) {
-  return http.put<ApiAppInfo>(`/apiapps/${id}`, { name }).then((r) => r.data);
-}
-
-export function deleteApp(id: number) {
-  return http.delete(`/apiapps/${id}`).then((r) => r.data);
+export function resetCredential(id: number) {
+  return http.post<ApiCredential>(`/apipubs/${id}/credential/reset`).then((r) => r.data);
 }

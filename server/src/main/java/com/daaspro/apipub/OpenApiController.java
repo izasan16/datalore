@@ -15,7 +15,8 @@ import java.util.Map;
 
 /**
  * 开放接口执行端。免平台登录，凭 X-Api-Key / X-Api-Secret 头调用。
- * GET /api/open/{path}?col=val&page=1&size=100&order_by=col&order=asc
+ * TABLE 模式：GET /api/open/{path}?col=val&page=1&size=100&order_by=col&order=asc
+ * SQL 模式：GET /api/open/{path}?param=value（不分页，行数受 max_rows 截断）
  */
 @RestController
 @RequestMapping("/api/open")
@@ -30,11 +31,11 @@ public class OpenApiController {
     @GetMapping("/{path}")
     public ResponseEntity<Map<String, Object>> invoke(
             @PathVariable String path,
-            @RequestHeader(value = "X-Api-Key", required = false) String appKey,
-            @RequestHeader(value = "X-Api-Secret", required = false) String appSecret,
+            @RequestHeader(value = "X-Api-Key", required = false) String apiKey,
+            @RequestHeader(value = "X-Api-Secret", required = false) String apiSecret,
             HttpServletRequest request) {
-        var app = service.authenticate(appKey, appSecret);
-        var resolved = service.resolve(path, app);
+        var api = service.authenticate(apiKey, apiSecret);
+        var resolved = service.resolve(path, api);
 
         Map<String, String> params = new LinkedHashMap<>();
         for (var e : request.getParameterMap().entrySet()) {

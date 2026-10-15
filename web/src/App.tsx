@@ -10,9 +10,9 @@ import DataManagePage from './pages/datamanage';
 import DataManageNewPage from './pages/datamanage/new';
 import SqlLabPage from './pages/sqllab';
 import ApiPubPage from './pages/apipub';
+import ApiPubEditPage from './pages/apipub/edit';
 import ApiPubNewPage from './pages/apipub/new';
 import ApiPubDetailPage from './pages/apipub/detail';
-import ApiAppsPage from './pages/apipub/apps';
 import EtlPage from './pages/etl';
 import EtlEditPage from './pages/etl/edit';
 import EtlDetailPage from './pages/etl/detail';
@@ -50,7 +50,7 @@ export default function App() {
         <Route path="/sqllab" element={<SqlLabPage />} />
         <Route path="/apipub" element={<ApiPubPage />} />
         <Route path="/apipub/new" element={<ApiPubNewPage />} />
-        <Route path="/apipub/apps" element={<ApiAppsPage />} />
+        <Route path="/apipub/:id/edit" element={<ApiPubEditPage />} />
         <Route path="/apipub/:id" element={<ApiPubDetailPage />} />
         <Route path="/etl" element={<EtlPage />} />
         <Route path="/etl/new" element={<EtlEditPage />} />

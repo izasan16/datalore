@@ -1,11 +1,7 @@
 package com.daaspro.apipub;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.daaspro.apipub.entity.ApiAppEntity;
-import com.daaspro.apipub.entity.ApiGrantEntity;
 import com.daaspro.apipub.entity.ApiPubEntity;
-import com.daaspro.apipub.mapper.ApiAppMapper;
-import com.daaspro.apipub.mapper.ApiGrantMapper;
 import com.daaspro.apipub.mapper.ApiPubMapper;
 import com.daaspro.common.exception.BizException;
 import com.daaspro.common.security.AesGcmCipher;
@@ -15,6 +11,7 @@ import com.daaspro.datasource.service.ConnectionManager;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -26,35 +23,35 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
  * 开放接口执行端（免登录，凭证走 X-Api-Key / X-Api-Secret 头）。
  * 安全要点：
- * - 只读：仅 SELECT 暴露列，过滤值全部 PreparedStatement 占位符；列名/表名只来自发布配置（双引号转义）。
- * - order_by 必须是暴露列；size 上限 max_rows；page ≥ 1。
- * - secret 校验：AES 解密后 constant-time 比较。path 不存在/停用/未授权一律 404（不泄露存在性）。
- * 已知取舍：密钥明文头传输依赖 HTTPS；无限流与调用审计（后续迭代）。
+ * - 凭证直接定位 api_pub（每接口独立 Key/Secret，constant-time 比对）。
+ * - TABLE 模式：仅 SELECT 暴露列，过滤值全部 PreparedStatement 占位符；列名/表名只来自发布配置。
+ * - SQL 模式：发布时已做只读校验，:param 替换为占位符，值按参数定义绑定；行数上限 setMaxRows 截断。
+ * - path 不存在/停用/凭证无效一律 401/404（不泄露存在性）。
  */
 @Service
 public class OpenApiService {
 
     public record OpenResult(List<String> columns, List<List<String>> rows, long total, int page, int size) {}
 
+    /** SQL 命名参数：与 EtlValidation.PARAM 同规则，避免匹配 :: 类型转换 */
+    private static final Pattern PARAM = Pattern.compile("(?<!:):([A-Za-z_][A-Za-z0-9_]*)");
+
     private final ApiPubMapper pubMapper;
-    private final ApiAppMapper appMapper;
-    private final ApiGrantMapper grantMapper;
     private final DataSourceMapper dsMapper;
     private final ConnectionManager connectionManager;
     private final AesGcmCipher cipher;
     private final ApiPubService pubService;
 
-    public OpenApiService(ApiPubMapper pubMapper, ApiAppMapper appMapper, ApiGrantMapper grantMapper,
-                          DataSourceMapper dsMapper,
+    public OpenApiService(ApiPubMapper pubMapper, DataSourceMapper dsMapper,
                           ConnectionManager connectionManager, AesGcmCipher cipher, ApiPubService pubService) {
         this.pubMapper = pubMapper;
-        this.appMapper = appMapper;
-        this.grantMapper = grantMapper;
         this.dsMapper = dsMapper;
         this.connectionManager = connectionManager;
         this.cipher = cipher;
@@ -76,46 +73,39 @@ public class OpenApiService {
         return new OpenApiException(401, "调用凭证无效");
     }
 
-    /** 校验应用凭证，返回 app；失败抛 401。 */
-    public ApiAppEntity authenticate(String appKey, String appSecret) {
-        if (appKey == null || appKey.isBlank() || appSecret == null || appSecret.isBlank()) {
+    /** 校验接口凭证，返回对应 api_pub；失败抛 401。 */
+    public ApiPubEntity authenticate(String apiKey, String apiSecret) {
+        if (apiKey == null || apiKey.isBlank() || apiSecret == null || apiSecret.isBlank()) {
             throw unauthorized();
         }
-        ApiAppEntity app = appMapper.selectOne(new LambdaQueryWrapper<ApiAppEntity>()
-                .eq(ApiAppEntity::getAppKey, appKey));
-        if (app == null) throw unauthorized();
+        ApiPubEntity api = pubMapper.selectOne(new LambdaQueryWrapper<ApiPubEntity>()
+                .eq(ApiPubEntity::getApiKey, apiKey));
+        if (api == null || api.getApiSecretEnc() == null || api.getApiSecretEnc().isBlank()) throw unauthorized();
         byte[] expected;
         byte[] actual;
         try {
-            expected = cipher.decrypt(app.getAppSecretEnc()).getBytes(StandardCharsets.UTF_8);
-            actual = appSecret.getBytes(StandardCharsets.UTF_8);
+            expected = cipher.decrypt(api.getApiSecretEnc()).getBytes(StandardCharsets.UTF_8);
+            actual = apiSecret.getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw unauthorized();
         }
         if (!MessageDigest.isEqual(expected, actual)) throw unauthorized();
-        return app;
+        return api;
     }
 
-    /** 解析 path → 启用的 API + 数据源；未授权/不存在/停用 → 404。 */
-    public Resolved resolve(String path, ApiAppEntity app) {
-        ApiPubEntity api = pubMapper.selectOne(new LambdaQueryWrapper<ApiPubEntity>()
+    /** 解析 path → 启用的 API + 数据源；不存在/停用 → 404。以 byPath 实时数据为准。 */
+    public Resolved resolve(String path, ApiPubEntity api) {
+        ApiPubEntity byPath = api == null ? null : pubMapper.selectOne(new LambdaQueryWrapper<ApiPubEntity>()
                 .eq(ApiPubEntity::getPath, path));
-        if (api == null || api.getStatus() == null || api.getStatus() != 1) {
+        if (byPath == null || !byPath.getId().equals(api.getId())
+                || byPath.getStatus() == null || byPath.getStatus() != 1) {
             throw new OpenApiException(404, "API 不存在或已停用");
         }
-        if (!api.getTenantId().equals(app.getTenantId())) {
-            // 跨租户 path 不允许撞车（发布时全局唯一），这里再兜底防数据异常
-            throw new OpenApiException(404, "API 不存在或已停用");
-        }
-        long granted = grantMapper.selectCount(new LambdaQueryWrapper<ApiGrantEntity>()
-                .eq(ApiGrantEntity::getApiId, api.getId())
-                .eq(ApiGrantEntity::getAppId, app.getId()));
-        if (granted == 0) throw new OpenApiException(404, "该应用未被授权调用此 API");
-        DataSourceEntity ds = api.getDatasourceId() == null ? null : dsMapper.selectById(api.getDatasourceId());
+        DataSourceEntity ds = byPath.getDatasourceId() == null ? null : dsMapper.selectById(byPath.getDatasourceId());
         if (ds == null) {
             throw new OpenApiException(404, "API 配置异常：数据源缺失");
         }
-        return new Resolved(api, ds);
+        return new Resolved(byPath, ds);
     }
 
     public record Resolved(ApiPubEntity api, DataSourceEntity datasource) {}
@@ -123,6 +113,15 @@ public class OpenApiService {
     /** 执行查询。queryParams 为 URL 上除 page/size/order_by/order 外的参数。 */
     public OpenResult query(Resolved r, Map<String, String> queryParams, String pageStr, String sizeStr,
                             String orderBy, String order) {
+        return "SQL".equals(r.api().getSourceType())
+                ? querySql(r, queryParams)
+                : queryTable(r, queryParams, pageStr, sizeStr, orderBy, order);
+    }
+
+    // ---------- TABLE 模式 ----------
+
+    private OpenResult queryTable(Resolved r, Map<String, String> queryParams,
+                                  String pageStr, String sizeStr, String orderBy, String order) {
         List<String> exposed = pubService.parseJson(r.api().getColumns());
         Set<String> exposedSet = exposed.stream().collect(Collectors.toSet());
         List<String> filters = pubService.parseJson(r.api().getFilterColumns());
@@ -145,12 +144,11 @@ public class OpenApiService {
         String table = schema == null || schema.isBlank()
                 ? quote(r.api().getTableName())
                 : quote(schema) + "." + quote(r.api().getTableName());
-        StringBuilder where = new StringBuilder();
+        String where = "";
         List<String> bind = new ArrayList<>();
         if (!effective.isEmpty()) {
-            where.append(" WHERE ");
-            where.append(effective.keySet().stream().map(c -> quote(c) + " = ?")
-                    .collect(Collectors.joining(" AND ")));
+            where = " WHERE " + effective.keySet().stream().map(c -> quote(c) + " = ?")
+                    .collect(Collectors.joining(" AND "));
             bind.addAll(effective.values());
         }
         String orderSql = "";
@@ -172,7 +170,6 @@ public class OpenApiService {
                 }
             }
             List<List<String>> rows = new ArrayList<>();
-            List<String> columns = new ArrayList<>(exposed);
             try (PreparedStatement st = conn.prepareStatement(
                     "SELECT " + cols + " FROM " + table + where + orderSql + " LIMIT ? OFFSET ?")) {
                 int idx = 1;
@@ -180,17 +177,96 @@ public class OpenApiService {
                 st.setInt(idx++, size);
                 st.setInt(idx, (page - 1) * size);
                 try (ResultSet rs = st.executeQuery()) {
-                    ResultSetMetaData md = rs.getMetaData();
-                    int n = md.getColumnCount();
-                    // 列名以发布配置顺序为准（PG 返回小写标签）
                     while (rs.next()) {
-                        List<String> row = new ArrayList<>(n);
-                        for (int i = 1; i <= n; i++) row.add(rs.getString(i));
+                        List<String> row = new ArrayList<>();
+                        for (int i = 1; i <= exposed.size(); i++) row.add(rs.getString(i));
                         rows.add(row);
                     }
                 }
             }
-            return new OpenResult(columns, rows, total, page, size);
+            return new OpenResult(new ArrayList<>(exposed), rows, total, page, size);
+        } catch (OpenApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new OpenApiException(500, "查询执行失败");
+        }
+    }
+
+    // ---------- SQL 模式 ----------
+
+    private OpenResult querySql(Resolved r, Map<String, String> queryParams) {
+        ApiPubEntity api = r.api();
+        List<ApiPubService.ParamDef> defs = pubService.parseParams(api.getParamsJson());
+        Map<String, ApiPubService.ParamDef> defMap = new LinkedHashMap<>();
+        for (ApiPubService.ParamDef d : defs) defMap.put(d.name(), d);
+
+        // 解析 SQL 中的参数出现顺序，并把 :param 替换为 ?
+        String sql = api.getSqlText();
+        StringBuilder sb = new StringBuilder();
+        List<String> order = new ArrayList<>();
+        Matcher m = PARAM.matcher(sql);
+        int last = 0;
+        while (m.find()) {
+            sb.append(sql, last, m.start()).append('?');
+            order.add(m.group(1));
+            last = m.end();
+        }
+        sb.append(sql.substring(last));
+
+        // 绑定值：必填缺失 → 400；可选缺失 → 默认值，否则 NULL；未知参数 → 400
+        List<Object> bind = new ArrayList<>();
+        for (String name : order) {
+            ApiPubService.ParamDef def = defMap.get(name);
+            if (def == null) throw new OpenApiException(500, "参数配置缺失: " + name);
+            String v = queryParams.get(name);
+            if (v == null || v.isBlank()) {
+                if (Boolean.FALSE.equals(def.required()) && def.defaultValue() != null && !def.defaultValue().isBlank()) {
+                    v = def.defaultValue();
+                } else if (Boolean.FALSE.equals(def.required())) {
+                    bind.add(null);
+                    continue;
+                } else {
+                    throw new OpenApiException(400, "缺少必填参数: " + name);
+                }
+            }
+            if ("number".equals(def.type())) {
+                try {
+                    bind.add(new BigDecimal(v.trim()));
+                } catch (NumberFormatException e) {
+                    throw new OpenApiException(400, "参数 " + name + " 必须是数字");
+                }
+            } else {
+                bind.add(v);
+            }
+        }
+        for (String k : queryParams.keySet()) {
+            if (!defMap.containsKey(k)) throw new OpenApiException(400, "不支持的查询参数: " + k);
+        }
+
+        int maxRows = api.getMaxRows() == null || api.getMaxRows() <= 0 ? 1000 : api.getMaxRows();
+        DataSource pool = connectionManager.pool(r.datasource(), cipher.decrypt(r.datasource().getPasswordEnc()));
+        try (Connection conn = pool.getConnection();
+             PreparedStatement st = conn.prepareStatement(sb.toString())) {
+            st.setMaxRows(maxRows);
+            int idx = 1;
+            for (Object v : bind) {
+                if (v == null) st.setNull(idx++, java.sql.Types.NULL);
+                else if (v instanceof BigDecimal bd) st.setBigDecimal(idx++, bd);
+                else st.setString(idx++, (String) v);
+            }
+            List<String> columns = new ArrayList<>();
+            List<List<String>> rows = new ArrayList<>();
+            try (ResultSet rs = st.executeQuery()) {
+                ResultSetMetaData md = rs.getMetaData();
+                int n = md.getColumnCount();
+                for (int i = 1; i <= n; i++) columns.add(md.getColumnLabel(i));
+                while (rs.next()) {
+                    List<String> row = new ArrayList<>(n);
+                    for (int i = 1; i <= n; i++) row.add(rs.getString(i));
+                    rows.add(row);
+                }
+            }
+            return new OpenResult(columns, rows, rows.size(), 1, Math.max(rows.size(), 1));
         } catch (OpenApiException e) {
             throw e;
         } catch (Exception e) {
