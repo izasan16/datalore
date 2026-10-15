@@ -33,7 +33,7 @@ public class EtlRunService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public EtlRunService(EtlRunMapper runMapper, EtlService etlService, DataSourceService dataSourceService,
-                         AesGcmCipher cipher, @Value("${daaspro.etl.worker-url:http://localhost:8090}") String workerUrl,
+                         AesGcmCipher cipher, @Value("${daaspro.etl.worker-url:http://localhost:18090}") String workerUrl,
                          @Value("${daaspro.etl.worker-token:dev-worker-token}") String workerToken) {
         this.runMapper = runMapper; this.etlService = etlService; this.dataSourceService = dataSourceService; this.cipher = cipher;
         this.worker = RestClient.builder().baseUrl(workerUrl).defaultHeader("Authorization", "Bearer " + workerToken).build();
