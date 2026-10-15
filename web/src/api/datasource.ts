@@ -15,6 +15,11 @@ export interface ColumnInfo {
   name: string;
   type: string;
   nullable?: string;
+  default?: string | null;
+  comment?: string | null;
+  charLength?: string | null;
+  numericPrecision?: string | null;
+  numericScale?: string | null;
 }
 
 export function listDatasources() {
@@ -111,6 +116,37 @@ export function alterColumn(id: number, schema: string | undefined, table: strin
                             action: 'addColumn' | 'renameColumn' | 'alterType' | 'dropColumn',
                             payload: { column: string; newColumn?: string; type?: string }) {
   return http.post(`/datasources/${id}/tables/columns`, { schema, table, action, ...payload }).then((r) => r.data);
+}
+
+export interface ColumnChange {
+  op: 'add' | 'update';
+  column?: string;
+  name: string;
+  base?: string | null;
+  length?: number;
+  precision?: number;
+  scale?: number;
+  nullable: boolean;
+  defaultValue?: string;
+  comment?: string;
+}
+
+export interface ColumnTypeDef {
+  base: string;
+  label: string;
+  param: 'NONE' | 'LENGTH' | 'PRECISION';
+  family: 'INT' | 'DECIMAL' | 'BOOL' | 'TEXT' | 'DATETIME' | 'OTHER';
+  aliases: string[];
+}
+
+export function columnTypes(dsType: string) {
+  return http.get<ColumnTypeDef[]>('/datasources/column-types/' + dsType).then((r) => r.data);
+}
+
+export function batchColumns(id: number, schema: string | undefined, table: string,
+                             changes: ColumnChange[], preview: boolean) {
+  return http.post('/datasources/' + id + '/tables/columns/batch', { schema, table, changes, preview })
+    .then((r) => r.data.statements as string[]);
 }
 
 export interface TableRef {

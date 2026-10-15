@@ -110,6 +110,36 @@ class TableDataServiceTest {
     }
 
     @Test
+    void batchColumnEditLifecycleOnPg() {
+        var changes = List.of(
+            new TableDataService.ColumnChange("update", "name", "title", "varchar", 100, null, null,
+                false, "x", "名称"),
+            new TableDataService.ColumnChange("add", null, "score", "numeric", null, 10, 2,
+                true, "0", "分数"));
+        // preview 只生成语句不落库
+        var stmts = tableDataService.batchColumnDdl(dsId, "public", table, changes, true);
+        assertThat(stmts).isNotEmpty();
+        var before = dataSourceService.listColumns(dsId, table, "public");
+        assertThat(before).extracting(c -> c.get("name")).doesNotContain("title");
+        // 执行
+        tableDataService.batchColumnDdl(dsId, "public", table, changes, false);
+        var cols = dataSourceService.listColumns(dsId, table, "public");
+        assertThat(cols).extracting(c -> c.get("name")).contains("title", "score");
+        var title = cols.stream().filter(c -> "title".equals(c.get("name"))).findFirst().orElseThrow();
+        assertThat(title.get("nullable")).isEqualTo("NO");
+        assertThat(title.get("default")).isNotNull();
+        assertThat(title.get("comment")).isEqualTo("名称");
+        var score = cols.stream().filter(c -> "score".equals(c.get("name"))).findFirst().orElseThrow();
+        assertThat(score.get("comment")).isEqualTo("分数");
+        assertThat(score.get("numericPrecision")).isEqualTo("10");
+        // 无变更 → 空语句
+        var noop = tableDataService.batchColumnDdl(dsId, "public", table,
+            List.of(new TableDataService.ColumnChange("update", "title", "title", null, null, null,
+                null, null, "x", "名称")), true);
+        assertThat(noop).isEmpty();
+    }
+
+    @Test
     void columnDdlLifecycleOnPg() {
         tableDataService.columnDdl(dsId, "public", table, "addColumn", "age", null, "bigint");
         var cols = dataSourceService.listColumns(dsId, table, "public");

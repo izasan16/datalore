@@ -20,8 +20,16 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '"
-                    + esc(schema) + "' AND table_name = '" + esc(table) + "' ORDER BY ordinal_position";
+            // 含默认值表达式、注释与类型参数（长度/精度/小数位），供字段编辑做 diff 与回显
+            return "SELECT c.column_name, c.data_type, c.is_nullable,"
+                    + " pg_get_expr(d.adbin, d.adrelid) AS column_default,"
+                    + " col_description((quote_ident(c.table_schema)||'.'||quote_ident(c.table_name))::regclass, c.ordinal_position) AS column_comment,"
+                    + " c.character_maximum_length, c.numeric_precision, c.numeric_scale"
+                    + " FROM information_schema.columns c"
+                    + " LEFT JOIN pg_attrdef d ON d.adrelid = (quote_ident(c.table_schema)||'.'||quote_ident(c.table_name))::regclass"
+                    + " AND d.adnum = c.ordinal_position"
+                    + " WHERE c.table_schema = '" + esc(schema) + "' AND c.table_name = '" + esc(table) + "'"
+                    + " ORDER BY c.ordinal_position";
         }
         @Override
         public String listSchemasSql() {
@@ -44,9 +52,11 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '"
-                    + esc(schema) + "' AND table_name = '"
-                    + esc(table) + "' ORDER BY ordinal_position";
+            return "SELECT c.column_name, c.data_type, c.is_nullable, c.column_default, c.column_comment,"
+                    + " c.character_maximum_length, c.numeric_precision, c.numeric_scale"
+                    + " FROM information_schema.columns c"
+                    + " WHERE c.table_schema = '" + esc(schema) + "' AND c.table_name = '"
+                    + esc(table) + "' ORDER BY c.ordinal_position";
         }
         @Override
         public String listSchemasSql() {
@@ -68,9 +78,16 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '"
-                    + esc(schema) + "' AND table_name = '"
-                    + esc(table) + "' ORDER BY ordinal_position";
+            return "SELECT c.column_name, c.data_type, c.is_nullable, c.column_default,"
+                    + " ep.value AS column_comment,"
+                    + " c.character_maximum_length, c.numeric_precision, c.numeric_scale"
+                    + " FROM information_schema.columns c"
+                    + " LEFT JOIN sys.columns sc ON sc.object_id = OBJECT_ID(QUOTENAME(c.table_schema) + '.' + QUOTENAME(c.table_name))"
+                    + " AND sc.name = c.column_name"
+                    + " LEFT JOIN sys.extended_properties ep ON ep.major_id = sc.object_id AND ep.minor_id = sc.column_id"
+                    + " AND ep.class = 1 AND ep.name = 'MS_Description'"
+                    + " WHERE c.table_schema = '" + esc(schema) + "' AND c.table_name = '" + esc(table) + "'"
+                    + " ORDER BY c.ordinal_position";
         }
         @Override
         public String listSchemasSql() {
@@ -93,8 +110,13 @@ public enum JdbcUrls {
         }
         @Override
         public String listColumnsSql(String schema, String table) {
-            return "SELECT column_name, data_type, nullable FROM all_tab_columns WHERE owner = '" + esc(schema)
-                    + "' AND table_name = '" + esc(table) + "' ORDER BY column_id";
+            return "SELECT c.column_name, c.data_type, c.nullable, c.data_default, cc.comments AS column_comment,"
+                    + " c.char_length, c.data_precision, c.data_scale"
+                    + " FROM all_tab_columns c"
+                    + " LEFT JOIN all_col_comments cc ON cc.owner = c.owner AND cc.table_name = c.table_name"
+                    + " AND cc.column_name = c.column_name"
+                    + " WHERE c.owner = '" + esc(schema) + "' AND c.table_name = '" + esc(table) + "'"
+                    + " ORDER BY c.column_id";
         }
         @Override
         public String listSchemasSql() {

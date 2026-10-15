@@ -2,6 +2,7 @@ package com.daaspro.datasource.controller;
 
 import com.daaspro.datasource.entity.DataSourceEntity;
 import com.daaspro.datasource.service.DataSourceService;
+import com.daaspro.datasource.service.ColumnTypes;
 import com.daaspro.datasource.service.TableDataService;
 import com.daaspro.datasource.service.TableDeleteService;
 import jakarta.validation.constraints.NotBlank;
@@ -141,6 +142,25 @@ public class DataSourceController {
         tableDataService.columnDdl(id, req.schema(), req.table(), req.action(),
                 req.column(), req.newColumn(), req.type());
         return Map.of("ok", true);
+    }
+
+    public record BatchColumnReq(String schema, String table,
+                                 List<TableDataService.ColumnChange> changes, boolean preview) {}
+
+    /** 字段 Tab 整表编辑：批量字段变更，preview=true 返回将执行的语句不执行。 */
+    @PostMapping("/{id}/tables/columns/batch")
+    public Map<String, Object> batchColumnDdl(@PathVariable Long id, @RequestBody BatchColumnReq req) {
+        List<String> statements = tableDataService.batchColumnDdl(id, req.schema(), req.table(),
+                req.changes(), req.preview());
+        return Map.of("statements", statements);
+    }
+
+    /** 按数据源方言下发原生列类型目录（前端类型下拉与参数输入）。 */
+    @GetMapping("/column-types/{dsType}")
+    public List<Map<String, Object>> columnTypes(@PathVariable String dsType) {
+        return ColumnTypes.of(dsType).stream().map(d -> Map.<String, Object>of(
+                "base", d.base(), "label", d.label(), "param", d.param().name(),
+                "family", d.family().name(), "aliases", d.aliases())).toList();
     }
 
     /** 删表引用检查：ETL 表输入/目标、API 发布、导入记录。 */

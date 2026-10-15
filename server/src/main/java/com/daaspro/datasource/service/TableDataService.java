@@ -16,6 +16,8 @@ import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -296,6 +298,66 @@ public class TableDataService {
         } catch (Exception e) {
             throw new BizException(400, "字段修改失败: " + DataSourceService.rootMessage(e));
         }
+    }
+
+    // ---------- 批量字段编辑（字段 Tab 整表编辑模式） ----------
+
+    public record ColumnChange(String op, String column, String name, String base, Integer length,
+                               Integer precision, Integer scale, Boolean nullable,
+                               String defaultValue, String comment) {}
+
+    /** 批量字段变更：preview=true 只返回将执行的语句；false 按序执行，失败标明第几条并透传原生错误。 */
+    public List<String> batchColumnDdl(Long dsId, String schemaParam, String table,
+                                       List<ColumnChange> changes, boolean preview) {
+        DataSourceEntity ds = dataSourceService.getOwned(dsId);
+        String schema = schema(ds, schemaParam);
+        validateIdent(schema, "schema");
+        validateIdent(table, "表名");
+        String dsType = ds.getType();
+        Map<String, ColumnDdlBuilder.Col> meta = new HashMap<>();
+        for (Map<String, String> c : dataSourceService.listColumns(dsId, table, schema)) {
+            meta.put(c.get("name").toLowerCase(Locale.ROOT),
+                    new ColumnDdlBuilder.Col(c.get("name"), c.get("type"),
+                            "YES".equalsIgnoreCase(c.get("nullable")),
+                            c.get("default"), c.get("comment")));
+        }
+        List<String> statements = new ArrayList<>();
+        for (ColumnChange ch : changes) {
+            if (ch == null) continue;
+            boolean add = "add".equals(ch.op());
+            if (!add && !"update".equals(ch.op())) throw new BizException(400, "不支持的字段操作: " + ch.op());
+            if (ch.name() == null || ch.name().isBlank()) throw new BizException(400, "列名不能为空");
+            String targetName = ch.name().trim();
+            validateIdent(targetName, "列名");
+            ColumnDdlBuilder.Col current = null;
+            if (!add) {
+                validateIdent(ch.column(), "列名");
+                current = meta.get(ch.column().toLowerCase(Locale.ROOT));
+                if (current == null) throw new BizException(400, "列不存在: " + ch.column());
+            }
+            var target = new ColumnDdlBuilder.Target(ch.op(), targetName, ch.base(), ch.length(),
+                    ch.precision(), ch.scale(), ch.nullable(), ch.defaultValue(), ch.comment());
+            statements.addAll(ColumnDdlBuilder.build(dsType, schema, table, current, target));
+        }
+        if (preview) return statements;
+        try (Connection conn = open(ds)) {
+            int i = 0;
+            for (String sql : statements) {
+                i++;
+                try (var st = conn.createStatement()) {
+                    st.execute(sql);
+                } catch (Exception e) {
+                    if (e instanceof BizException b) throw b;
+                    throw new BizException(400, "第 " + i + " 条语句执行失败: " + sql + " | "
+                            + DataSourceService.rootMessage(e));
+                }
+            }
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "字段修改失败: " + DataSourceService.rootMessage(e));
+        }
+        return statements;
     }
 
     // ---------- 内部工具 ----------

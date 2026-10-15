@@ -153,7 +153,16 @@ public class DataSourceService {
             while (rs.next()) {
                 String nullable = rs.getString(3);
                 String normalized = "YES".equalsIgnoreCase(nullable) || "Y".equalsIgnoreCase(nullable) ? "YES" : "NO";
-                rows.add(Map.of("name", rs.getString(1), "type", rs.getString(2), "nullable", normalized));
+                Map<String, String> row = new java.util.LinkedHashMap<>();
+                row.put("name", rs.getString(1));
+                row.put("type", rs.getString(2));
+                row.put("nullable", normalized);
+                row.put("default", rs.getString(4) == null ? null : rs.getString(4).trim());
+                row.put("comment", rs.getString(5));
+                row.put("charLength", rs.getObject(6) == null ? null : String.valueOf(rs.getLong(6)));
+                row.put("numericPrecision", rs.getObject(7) == null ? null : String.valueOf(rs.getInt(7)));
+                row.put("numericScale", rs.getObject(8) == null ? null : String.valueOf(rs.getInt(8)));
+                rows.add(row);
             }
             return rows;
         } catch (BizException e) {

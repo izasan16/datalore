@@ -1,17 +1,34 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Button, Checkbox, Input, Message, Modal, Select, Space, Spin, Table, Tabs, Tag, Tree, Typography,
+  Button, Checkbox, Input, InputNumber, Message, Modal, Select, Space, Spin, Switch, Table, Tabs, Tag, Tooltip, Tree, Typography,
 } from '@arco-design/web-react';
 import { IconDelete, IconDownload, IconPlus, IconRefresh, IconSearch } from '@arco-design/web-react/icon';
 import {
-  alterColumn, ColumnInfo, DataSourceInfo, deleteRows, exportRows, FILTER_OPS, insertRow,
+  alterColumn, batchColumns, ColumnChange, ColumnInfo, columnTypes, ColumnTypeDef, DataSourceInfo,
+  deleteRows, exportRows, FILTER_OPS, insertRow,
   listColumns, listDatasources, listRows, listSchemas, listTables,
-  STD_COLUMN_TYPES, TableFilter, TableRef, TableRowsResult, tableRefs, deleteTable,
+  TableFilter, TableRef, TableRowsResult, tableRefs, deleteTable,
 } from '../../api/datasource';
 import { ImportedTableInfo, listImported } from '../../api/imported';
 
 type RowRec = { __rid: string; row: string[] };
+
+type FieldEditRow = {
+  key: string;
+  op: 'add' | 'update';
+  column?: string;
+  originalType?: string;
+  name: string;
+  base: string;
+  length?: number;
+  precision?: number;
+  scale?: number;
+  nullable: boolean;
+  defaultValue: string;
+  origDefault: string;
+  comment: string;
+};
 
 /** 数据管理：左侧数据源→schema→表树，右侧 Tabs（数据 CRUD / 字段 DDL）。 */
 export default function DataManagePage() {
@@ -40,13 +57,14 @@ export default function DataManagePage() {
 
   const [insertVisible, setInsertVisible] = useState(false);
   const [insertValues, setInsertValues] = useState<Record<string, string>>({});
-  const [addFieldVisible, setAddFieldVisible] = useState(false);
-  const [addFieldName, setAddFieldName] = useState('');
-  const [addFieldType, setAddFieldType] = useState('text');
-  const [renameTarget, setRenameTarget] = useState<ColumnInfo | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [typeTarget, setTypeTarget] = useState<ColumnInfo | null>(null);
-  const [typeValue, setTypeValue] = useState('text');
+  const [fieldEditMode, setFieldEditMode] = useState(false);
+  const [editRows, setEditRows] = useState<FieldEditRow[]>([]);
+  const [catalog, setCatalog] = useState<ColumnTypeDef[]>([]);
+  const [selectedField, setSelectedField] = useState<string | null>(null);
+  const [sqlStatements, setSqlStatements] = useState<string[] | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<ColumnChange[] | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [fieldKeySeq, setFieldKeySeq] = useState(1000);
   const [dropTarget, setDropTarget] = useState<ColumnInfo | null>(null);
   const [dropAck, setDropAck] = useState(false);
   const [deleteRefs, setDeleteRefs] = useState<TableRef[] | null>(null);
@@ -124,6 +142,8 @@ export default function DataManagePage() {
       setAppliedFilters([]);
       setSort({});
       setSelectedRowKeys([]);
+      setFieldEditMode(false);
+      setSelectedField(null);
       setActiveTab('data');
     }
   }
@@ -293,16 +313,132 @@ export default function DataManagePage() {
     }
   }
 
-  async function runColumnDdl(action: 'addColumn' | 'renameColumn' | 'alterType' | 'dropColumn',
-                             column: string, payload: { newColumn?: string; type?: string }) {
+  // ---------- 字段整表编辑 ----------
+
+  function dsType(): string {
+    return dsList.find((d) => d.id === selected?.dsId)?.type || '';
+  }
+
+  function toEditRow(c: ColumnInfo, key: string, cat: ColumnTypeDef[]): FieldEditRow {
+    const typeLower = (c.type || '').toLowerCase();
+    let base = '__keep__';
+    let length: number | undefined;
+    let precision: number | undefined;
+    let scale: number | undefined;
+    const def = cat.find((d) => d.aliases.some((a) => a.toLowerCase() === typeLower)
+      && (d.param === 'NONE'
+        || (d.param === 'LENGTH' ? Number(c.charLength) > 0 : Number(c.numericPrecision) > 0)));
+    if (def) {
+      base = def.base;
+      if (def.param === 'LENGTH') length = Number(c.charLength);
+      if (def.param === 'PRECISION') {
+        precision = Number(c.numericPrecision);
+        scale = Number(c.numericScale);
+      }
+    }
+    return {
+      key, op: 'update', column: c.name, originalType: c.type, name: c.name, base,
+      length, precision, scale,
+      nullable: c.nullable !== 'NO',
+      defaultValue: c.default || '', origDefault: c.default || '', comment: c.comment || '',
+    };
+  }
+
+  async function enterFieldEdit() {
     if (!selected) return;
+    let cat: ColumnTypeDef[];
     try {
-      await alterColumn(selected.dsId, selected.schema, selected.table, action, { column, ...payload });
+      cat = await columnTypes(dsType());
+      setCatalog(cat);
+    } catch {
+      Message.error('类型目录加载失败');
+      return;
+    }
+    setEditRows(columns.map((c, i) => toEditRow(c, String(i), cat)));
+    setFieldEditMode(true);
+  }
+
+  function exitFieldEdit() {
+    setFieldEditMode(false);
+    setEditRows([]);
+    setPendingChanges(null);
+    setSqlStatements(null);
+  }
+
+  function updateEditRow(key: string, patch: Partial<FieldEditRow>) {
+    setEditRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function addEditRow() {
+    const key = 'new' + fieldKeySeq;
+    setFieldKeySeq(fieldKeySeq + 1);
+    setEditRows((prev) => [...prev, {
+      key, op: 'add', name: '', base: catalog[0]?.base || '__keep__',
+      nullable: true, defaultValue: '', origDefault: '', comment: '',
+    }]);
+  }
+
+  function removeEditRow(key: string) {
+    setEditRows((prev) => prev.filter((r) => r.key !== key));
+  }
+
+  const FIELD_IDENT_RE = /^[\p{L}_][\p{L}\p{N}_]{0,62}$/u;
+
+  async function previewFieldChanges() {
+    if (!selected) return;
+    const names = editRows.map((r) => r.name.trim());
+    if (names.some((n) => !n)) { Message.error('列名不能为空'); return; }
+    if (names.some((n) => !FIELD_IDENT_RE.test(n))) {
+      Message.error('列名仅支持中英文、数字、下划线，且以中文、字母或下划线开头');
+      return;
+    }
+    const lowered = names.map((n) => n.toLowerCase());
+    if (new Set(lowered).size !== lowered.length) { Message.error('列名不能重复'); return; }
+    for (const r of editRows) {
+      const def = catalog.find((d) => d.base === r.base);
+      if (r.base !== '__keep__' && !def) { Message.error('请选择字段类型: ' + (r.name || '(新列)')); return; }
+      if (def?.param === 'LENGTH' && (!r.length || r.length < 1)) { Message.error(r.name + ' 需要长度参数'); return; }
+      if (def?.param === 'PRECISION' && (!r.precision || r.precision < 1)) { Message.error(r.name + ' 需要精度参数'); return; }
+      if (def?.family === 'BOOL' && r.defaultValue.trim()
+        && !['TRUE', 'FALSE'].includes(r.defaultValue.trim().toUpperCase())) {
+        Message.error(r.name + ' 默认值只能为 TRUE/FALSE');
+        return;
+      }
+    }
+    const changes: ColumnChange[] = editRows.map((r) => ({
+      op: r.op, column: r.column, name: r.name.trim(),
+      base: r.base === '__keep__' ? null : r.base,
+      length: r.length, precision: r.precision, scale: r.scale,
+      nullable: r.nullable,
+      defaultValue: r.op === 'add' || r.defaultValue !== r.origDefault ? r.defaultValue : undefined,
+      comment: r.comment,
+    }));
+    try {
+      const stmts = await batchColumns(selected.dsId, selected.schema, selected.table, changes, true);
+      if (stmts.length === 0) { Message.warning('无变更'); return; }
+      setPendingChanges(changes);
+      setSqlStatements(stmts);
+    } catch (e: any) {
+      Message.error(e.response?.data?.message || '生成 DDL 失败');
+    }
+  }
+
+  async function executeFieldChanges() {
+    if (!selected || !pendingChanges) return;
+    setExecuting(true);
+    try {
+      await batchColumns(selected.dsId, selected.schema, selected.table, pendingChanges, false);
       Message.success('字段已更新');
+      setSqlStatements(null);
+      setPendingChanges(null);
+      setFieldEditMode(false);
+      setEditRows([]);
       loadColumns();
       loadRows();
     } catch (e: any) {
-      Message.error(e.response?.data?.message || '字段修改失败');
+      Message.error(e.response?.data?.message || '执行失败');
+    } finally {
+      setExecuting(false);
     }
   }
 
@@ -384,6 +520,99 @@ export default function DataManagePage() {
   }));
 
   const colOptions = columns.map((c) => ({ label: c.name, value: c.name }));
+
+  const fieldReadColumns = [
+    { title: '列名', dataIndex: 'name' },
+    { title: '类型', dataIndex: 'type', width: 200 },
+    { title: '可空', dataIndex: 'nullable', width: 80, render: (v: string) => (v === 'NO' ? '否' : '是') },
+    { title: '默认值', dataIndex: 'default', render: (v: string) => (v
+      ? <Typography.Text style={{ fontSize: 13 }}>{v}</Typography.Text>
+      : <Typography.Text type="secondary">NULL</Typography.Text>) },
+    { title: '注释', dataIndex: 'comment', ellipsis: true },
+  ];
+
+  const fieldEditColumns = [
+    {
+      title: '列名', width: 180,
+      render: (_: unknown, r: FieldEditRow) => (
+        <Input size="small" value={r.name} onChange={(v: string) => updateEditRow(r.key, { name: v })} />
+      ),
+    },
+    {
+      title: '类型', width: 240,
+      render: (_: unknown, r: FieldEditRow) => {
+        const def = catalog.find((d) => d.base === r.base);
+        const options = catalog.map((d) => ({ label: d.label, value: d.base }));
+        if (r.base === '__keep__') {
+          options.push({ label: '保持现有类型（' + (r.originalType || '') + '）', value: '__keep__' });
+        }
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Select size="small" value={r.base} options={options}
+              onChange={(v: string) => updateEditRow(r.key, { base: v })} />
+            {def?.param === 'LENGTH' && (
+              <InputNumber size="mini" placeholder="长度" value={r.length}
+                onChange={(v: any) => updateEditRow(r.key, { length: v === undefined || v === null || v === '' ? undefined : Number(v) })} />
+            )}
+            {def?.param === 'PRECISION' && (
+              <Space size={4}>
+                <InputNumber size="mini" placeholder="精度" value={r.precision}
+                  onChange={(v: any) => updateEditRow(r.key, { precision: v === undefined || v === null || v === '' ? undefined : Number(v) })} />
+                <InputNumber size="mini" placeholder="小数位" value={r.scale}
+                  onChange={(v: any) => updateEditRow(r.key, { scale: v === undefined || v === null || v === '' ? undefined : Number(v) })} />
+              </Space>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: '可空', width: 70,
+      render: (_: unknown, r: FieldEditRow) => (
+        <Switch size="small" checked={r.nullable} onChange={(v: boolean) => updateEditRow(r.key, { nullable: v })} />
+      ),
+    },
+    {
+      title: '默认值', width: 180,
+      render: (_: unknown, r: FieldEditRow) => {
+        const def = catalog.find((d) => d.base === r.base);
+        const isSqlServer = dsType() === 'sqlserver';
+        const disabled = isSqlServer || r.base === '__keep__';
+        const tip = isSqlServer ? 'SQL Server 暂不支持该属性' : '该列类型不在类型目录中，暂不支持修改默认值';
+        let control: JSX.Element;
+        if (disabled) {
+          control = <Input size="small" disabled placeholder={tip} value={r.defaultValue}
+            onChange={(v: string) => updateEditRow(r.key, { defaultValue: v })} />;
+        } else if (def?.family === 'INT' || def?.family === 'DECIMAL') {
+          control = <InputNumber size="small" value={r.defaultValue ? Number(r.defaultValue) : undefined}
+            onChange={(v: any) => updateEditRow(r.key, { defaultValue: v === undefined || v === null || v === '' ? '' : String(v) })} />;
+        } else if (def?.family === 'BOOL') {
+          control = <Select size="small" allowClear placeholder="TRUE/FALSE" value={r.defaultValue || undefined}
+            options={[{ label: 'TRUE', value: 'TRUE' }, { label: 'FALSE', value: 'FALSE' }]}
+            onChange={(v: any) => updateEditRow(r.key, { defaultValue: v || '' })} />;
+        } else {
+          control = <Input size="small" value={r.defaultValue} placeholder="字面量或 CURRENT_TIMESTAMP"
+            onChange={(v: string) => updateEditRow(r.key, { defaultValue: v })} />;
+        }
+        return disabled ? <Tooltip content={tip}><span style={{ width: '100%' }}>{control}</span></Tooltip> : control;
+      },
+    },
+    {
+      title: '注释', width: 200,
+      render: (_: unknown, r: FieldEditRow) => {
+        const disabled = dsType() === 'sqlserver';
+        const ta = <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} disabled={disabled} value={r.comment}
+          onChange={(v: string) => updateEditRow(r.key, { comment: v })} />;
+        return disabled ? <Tooltip content="SQL Server 暂不支持该属性"><span>{ta}</span></Tooltip> : ta;
+      },
+    },
+    {
+      title: '', width: 40,
+      render: (_: unknown, r: FieldEditRow) => (r.op === 'add'
+        ? <Button size="mini" type="text" status="danger" icon={<IconDelete />} onClick={() => removeEditRow(r.key)} />
+        : <span />),
+    },
+  ];
 
   return (
     <div className="page-fill" style={{ flexDirection: 'column', gap: 16 }}>
@@ -512,33 +741,48 @@ export default function DataManagePage() {
               <Tabs.TabPane key="fields" title="字段">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <Space>
-                    <Button size="small" type="primary" icon={<IconPlus />} onClick={() => { setAddFieldName(''); setAddFieldType('text'); setAddFieldVisible(true); }}>
-                      新增字段
-                    </Button>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>改类型 / 删除字段会立即修改数据库表结构，请谨慎操作</Typography.Text>
+                    {fieldEditMode ? (
+                      <>
+                        <Button size="small" type="primary" onClick={previewFieldChanges}>保存</Button>
+                        <Button size="small" onClick={exitFieldEdit}>取消</Button>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          保存后生成 DDL 预览，确认执行后立即生效
+                        </Typography.Text>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="small" type="primary" onClick={enterFieldEdit}>编辑</Button>
+                        <Button size="small" status="danger" icon={<IconDelete />} disabled={!selectedField}
+                          onClick={() => {
+                            const c = columns.find((x) => x.name === selectedField);
+                            if (c) { setDropTarget(c); setDropAck(false); }
+                          }}>
+                          删除字段
+                        </Button>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          删除字段会立即修改数据库表结构，请谨慎操作
+                        </Typography.Text>
+                      </>
+                    )}
                   </Space>
                   <Table
                     loading={columnsLoading}
-                    data={columns}
-                    rowKey="name"
+                    data={(fieldEditMode ? editRows : columns) as any}
+                    rowKey={fieldEditMode ? 'key' : 'name'}
                     size="default"
                     pagination={false}
-                    columns={[
-                      { title: '列名', dataIndex: 'name' },
-                      { title: '类型', dataIndex: 'type', width: 200 },
-                      { title: '可空', dataIndex: 'nullable', width: 80, render: (v: string) => (v === 'YES' ? '是' : '否') },
-                      {
-                        title: '操作', width: 220,
-                        render: (_: unknown, c: ColumnInfo) => (
-                          <Space size={4}>
-                            <Button size="small" onClick={() => { setRenameTarget(c); setRenameValue(c.name); }}>改名</Button>
-                            <Button size="small" onClick={() => { setTypeTarget(c); setTypeValue('text'); }}>改类型</Button>
-                            <Button size="small" status="danger" onClick={() => { setDropTarget(c); setDropAck(false); }}>删除</Button>
-                          </Space>
-                        ),
-                      },
-                    ] as any}
+                    rowSelection={fieldEditMode ? undefined : {
+                      type: 'radio' as const,
+                      selectedRowKeys: selectedField ? [selectedField] : [],
+                      onChange: (keys: (string | number)[]) => setSelectedField((keys[0] as string) || null),
+                    }}
+                    columns={(fieldEditMode ? fieldEditColumns : fieldReadColumns) as any}
                   />
+                  {fieldEditMode && (
+                    <Button size="small" type="dashed" icon={<IconPlus />} onClick={addEditRow} style={{ width: 120 }}>
+                      添加字段
+                    </Button>
+                  )}
                 </div>
               </Tabs.TabPane>
             </Tabs>
@@ -570,59 +814,25 @@ export default function DataManagePage() {
       </Modal>
 
       <Modal
-        title="新增字段"
-        visible={addFieldVisible}
-        onOk={async () => {
-          if (!addFieldName.trim()) { Message.error('请输入字段名'); return; }
-          await runColumnDdl('addColumn', addFieldName.trim(), { type: addFieldType });
-          setAddFieldVisible(false);
-        }}
-        onCancel={() => setAddFieldVisible(false)}
-        okText="创建"
+        title="SQL 预览"
+        visible={!!sqlStatements}
+        confirmLoading={executing}
+        okText="确认执行"
+        style={{ width: 680 }}
+        onOk={executeFieldChanges}
+        onCancel={() => setSqlStatements(null)}
         unmountOnExit
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Typography.Text style={{ width: 64 }}>字段名</Typography.Text>
-            <Input value={addFieldName} placeholder="仅字母、数字、下划线" onChange={setAddFieldName} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Typography.Text style={{ width: 64 }}>类型</Typography.Text>
-            <Select value={addFieldType} options={STD_COLUMN_TYPES as any} style={{ width: 200 }} onChange={(v: string) => setAddFieldType(v)} />
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        title={`改名：${renameTarget?.name ?? ''}`}
-        visible={!!renameTarget}
-        onOk={async () => {
-          if (!renameValue.trim()) { Message.error('请输入新字段名'); return; }
-          await runColumnDdl('renameColumn', renameTarget!.name, { newColumn: renameValue.trim() });
-          setRenameTarget(null);
-        }}
-        onCancel={() => setRenameTarget(null)}
-        okText="保存"
-        unmountOnExit
-      >
-        <Input value={renameValue} placeholder="新字段名" onChange={setRenameValue} />
-      </Modal>
-
-      <Modal
-        title={`改类型：${typeTarget?.name ?? ''}`}
-        visible={!!typeTarget}
-        onOk={async () => {
-          await runColumnDdl('alterType', typeTarget!.name, { type: typeValue });
-          setTypeTarget(null);
-        }}
-        onCancel={() => setTypeTarget(null)}
-        okText="确认修改"
-        unmountOnExit
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Typography.Text type="secondary">当前类型：{typeTarget?.type}</Typography.Text>
-          <Select value={typeValue} options={STD_COLUMN_TYPES as any} style={{ width: 200 }} onChange={(v: string) => setTypeValue(v)} />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>类型转换可能导致数据截断或失败，以数据库返回结果为准</Typography.Text>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Typography.Text type="secondary">
+            将执行以下 {sqlStatements ? sqlStatements.length : 0} 条语句，确认后立即生效：
+          </Typography.Text>
+          <pre style={{
+            margin: 0, padding: 12, background: 'var(--color-fill-2)', borderRadius: 4,
+            maxHeight: 320, overflow: 'auto', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+          }}>
+            {(sqlStatements || []).map((stmt, i) => (i + 1) + '. ' + stmt).join('\n')}
+          </pre>
         </div>
       </Modal>
 
@@ -632,8 +842,15 @@ export default function DataManagePage() {
         okText="删除"
         okButtonProps={{ status: 'danger', disabled: !dropAck }}
         onOk={async () => {
-          await runColumnDdl('dropColumn', dropTarget!.name, {});
-          setDropTarget(null);
+          if (!selected || !dropTarget) return;
+          try {
+            await alterColumn(selected.dsId, selected.schema, selected.table, 'dropColumn', { column: dropTarget.name });
+            Message.success('字段已删除');
+            setDropTarget(null);
+            loadColumns();
+          } catch (e: any) {
+            Message.error(e.response?.data?.message || '删除失败');
+          }
         }}
         onCancel={() => setDropTarget(null)}
         unmountOnExit
