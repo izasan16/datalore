@@ -100,11 +100,12 @@ export default function ApiPubDetailPage() {
   }
 
   const isSql = api.sourceType === 'SQL';
+  // 示例值统一 URL 编码：Tomcat 会拒绝请求行里的非 ASCII 原始字节
   const paramQuery = (api.params ?? [])
     .filter((p) => p.required)
-    .map((p) => `${p.name}=${p.type === 'number' ? 1 : '值'}`)
+    .map((p) => `${p.name}=${p.type === 'number' ? 1 : encodeURIComponent('北京')}`)
     .join('&');
-  const tableQuery = api.filterColumns.length ? `${api.filterColumns[0]}=值&` : '';
+  const tableQuery = api.filterColumns.length ? `${api.filterColumns[0]}=${encodeURIComponent('北京')}&` : '';
   const curl = isSql
     ? `curl "http://localhost:8080/api/open/${api.path}${paramQuery ? `?${paramQuery}` : ''}" \\
   -H "X-Api-Key: ${cred?.apiKey ?? '<your-api-key>'}" \\
@@ -217,6 +218,9 @@ export default function ApiPubDetailPage() {
           {isSql
             ? 'SQL 模式按声明的参数传参（可选参数可省略），返回行数受行数上限截断，不支持分页。'
             : '表模式支持参数：page、size、order_by（暴露列）、order=asc|desc，以及每个可过滤列的等值参数。'}
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
+            注意：中文参数值必须 URL 编码（如 北京 → %E5%8C%97%E4%BA%AC），否则服务器会直接拒绝请求。
+          </Typography.Text>
         </Typography.Text>
       </section>
     </div>
