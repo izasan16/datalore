@@ -16,7 +16,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <span className="auth-brand-logo-mark">
             <LogoMark size={36} />
           </span>
-          <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: 0.5 }}>daaspro</span>
+          <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: 0.5 }}>数据开发平台</span>
         </div>
 
         <div className="auth-brand-body">
@@ -26,7 +26,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             只需一条流畅的链路
           </h1>
           <p>
-            daaspro 面向数据分析师与数据开发工程师：接入数据、建模分析、发布服务、可视呈现，在一个平台完成。
+            数据开发平台面向数据分析师与数据开发工程师：接入数据、建模分析、发布服务、可视呈现，在一个平台完成。
           </p>
           <div className="auth-brand-features">
             {FEATURES.map((f) => (
@@ -38,7 +38,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="auth-brand-footer">© 2026 daaspro · 数据分析平台</div>
+        <div className="auth-brand-footer">© 2026 数据开发平台</div>
       </div>
 
       <div className="auth-panel">

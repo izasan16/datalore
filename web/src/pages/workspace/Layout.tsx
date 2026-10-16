@@ -28,8 +28,8 @@ const MENU = [
   { key: 'datasource', title: '数据源', icon: <IconStorage /> },
   { key: 'datamanage', title: '数据管理', icon: <IconCloud /> },
   { key: 'sqllab', title: 'SQL 分析', icon: <IconCode /> },
-  { key: 'apipub', title: 'API 发布', icon: <IconCodeBlock /> },
   { key: 'pyscript', title: 'Python 分析', icon: <IconBook /> },
+  { key: 'apipub', title: 'API 发布', icon: <IconCodeBlock /> },
   { key: 'etl', title: '数据集成', icon: <IconSync /> },
 ];
 
@@ -66,8 +66,7 @@ export default function WorkspaceLayout() {
       <Sider width={216} style={{ background: '#fff', borderRight: '1px solid var(--color-border-2)', overflowY: 'auto' }}>
         <div className="ws-sider-logo">
           <LogoMark size={28} />
-          daaspro
-        </div>
+          数据开发平台</div>
         <Menu
           selectedKeys={selectedKeys}
           style={{ width: '100%' }}

@@ -248,7 +248,7 @@ export default function PyScriptPage() {
     <div style={{ display: 'flex', gap: 12, height: 'calc(100vh - 60px)', padding: '12px 16px' }}>
       {/* Left: script list + HDFS tree */}
       <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Card size="small" title="脚本" extra={<Button size="mini" icon={<IconPlus />} onClick={() => setNewDialog(true)} />} style={{ flex: '0 0 auto' }}>
+        <Card size="small" title="脚本" extra={<Button size="mini" type="primary" icon={<IconPlus />} onClick={() => setNewDialog(true)}>新建</Button>} style={{ flex: '0 0 auto' }}>
           <div style={{ maxHeight: 300, overflowY: 'auto' }}>
             {scripts.length === 0 && <Text type="secondary">暂无脚本</Text>}
             {scripts.map((s) => (
