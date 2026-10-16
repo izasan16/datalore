@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,6 +85,14 @@ public class EtlRunService {
         EtlRunEntity run = get(id); if (run.getWorkerRunId() == null || List.of("SUCCESS", "FAILED", "CANCELED").contains(run.getStatus())) return run;
         try { Map<?, ?> view = worker.get().uri("/internal/runs/{id}", run.getWorkerRunId()).retrieve().body(Map.class); String status = String.valueOf(view.get("status"));
             if (List.of("SUCCESS", "FAILED", "CANCELED").contains(status)) { run.setStatus(status); run.setReadRows(number(view.get("readRows"))); run.setWrittenRows(number(view.get("writtenRows"))); run.setErrorSummary(view.get("error") == null ? null : String.valueOf(view.get("error"))); run.setFinishedAt(LocalDateTime.now()); runMapper.updateById(run); }
+        } catch (HttpStatusCodeException e) {
+            // Worker 重启后无法确认的运行标记为失败，不自动重放
+            if (e.getStatusCode().value() == 404) {
+                run.setStatus("FAILED");
+                run.setErrorSummary("Worker 丢失该运行（可能已重启），请手动重试");
+                run.setFinishedAt(LocalDateTime.now());
+                runMapper.updateById(run);
+            }
         } catch (Exception ignored) { }
         return run;
     }

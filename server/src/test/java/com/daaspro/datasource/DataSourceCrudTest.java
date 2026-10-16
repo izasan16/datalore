@@ -59,7 +59,7 @@ class DataSourceCrudTest {
     @Test
     void rejectsUnknownType() {
         newTenant("dstype");
-        assertThatThrownBy(() -> service.create("x", "hive", "h", 1, "d", null, "u", "p"))
+        assertThatThrownBy(() -> service.create("x", "sqlite", "h", 1, "d", null, "u", "p"))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("不支持");
     }

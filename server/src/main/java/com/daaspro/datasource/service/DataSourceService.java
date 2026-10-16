@@ -16,7 +16,7 @@ import java.util.Map;
 @Service
 public class DataSourceService {
 
-    static final List<String> SUPPORTED = List.of("postgresql", "mysql", "sqlserver", "oracle");
+    static final List<String> SUPPORTED = List.of("postgresql", "mysql", "sqlserver", "oracle", "hive");
 
     private final DataSourceMapper mapper;
     private final AesGcmCipher cipher;
@@ -115,6 +115,17 @@ public class DataSourceService {
 
     public List<Map<String, String>> listSchemas(Long id) {
         DataSourceEntity ds = getOwned(id);
+        if ("hive".equals(ds.getType())) {
+            try (var conn = open(ds); var st = conn.createStatement(); var rs = st.executeQuery("SHOW DATABASES")) {
+                var rows = new ArrayList<Map<String, String>>();
+                while (rs.next()) rows.add(Map.of("name", rs.getString(1)));
+                return rows;
+            } catch (BizException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new BizException(400, "浏览 schema 失败: " + rootMessage(e));
+            }
+        }
         String sql = JdbcUrls.of(ds.getType()).listSchemasSql();
         try (var conn = open(ds); var st = conn.prepareStatement(sql); var rs = st.executeQuery()) {
             var rows = new ArrayList<Map<String, String>>();
@@ -131,6 +142,17 @@ public class DataSourceService {
         DataSourceEntity ds = getOwned(id);
         String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
         String sql = JdbcUrls.of(ds.getType()).listTablesSql(schema);
+        if ("hive".equals(ds.getType())) {
+            try (var conn = open(ds); var st = conn.createStatement(); var rs = st.executeQuery(sql)) {
+                var rows = new ArrayList<Map<String, String>>();
+                while (rs.next()) rows.add(Map.of("name", rs.getString(1)));
+                return rows;
+            } catch (BizException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new BizException(400, "浏览表失败: " + rootMessage(e));
+            }
+        }
         try (var conn = open(ds); var st = conn.prepareStatement(sql)) {
             try (var rs = st.executeQuery()) {
                 var rows = new ArrayList<Map<String, String>>();
@@ -148,6 +170,9 @@ public class DataSourceService {
         DataSourceEntity ds = getOwned(id);
         String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
         String sql = JdbcUrls.of(ds.getType()).listColumnsSql(schema, table);
+        if ("hive".equals(ds.getType())) {
+            return listHiveColumns(ds, sql);
+        }
         try (var conn = open(ds); var st = conn.prepareStatement(sql); var rs = st.executeQuery()) {
             var rows = new ArrayList<Map<String, String>>();
             while (rs.next()) {
@@ -180,12 +205,47 @@ public class DataSourceService {
         }
     }
 
-    /** MySQL 用反引号，其余（PG/SQL Server/Oracle）用双引号。 */
+    /** MySQL/Hive 用反引号，其余（PG/SQL Server/Oracle）用双引号。 */
     private String quoteIdent(DataSourceEntity ds, String ident) {
-        if ("mysql".equals(ds.getType())) {
+        if ("mysql".equals(ds.getType()) || "hive".equals(ds.getType())) {
             return "`" + ident.replace("`", "``") + "`";
         }
         return "\"" + ident.replace("\"", "\"\"") + "\"";
+    }
+
+    /** Hive DESCRIBE 输出解析：col_name / data_type / comment，跳过分隔与分区头行。 */
+    private List<Map<String, String>> listHiveColumns(DataSourceEntity ds, String sql) {
+        try (var conn = open(ds); var st = conn.createStatement(); var rs = st.executeQuery(sql)) {
+            var rows = new ArrayList<Map<String, String>>();
+            while (rs.next()) {
+                String name = rs.getString(1);
+                String type = rs.getString(2);
+                String comment = rs.getString(3);
+                if (name == null || name.isBlank() || name.trim().startsWith("#")) continue;
+                java.util.Map<String, String> row = new java.util.LinkedHashMap<>();
+                row.put("name", name.trim());
+                row.put("type", type == null ? "string" : type.trim());
+                row.put("nullable", "YES");
+                row.put("default", null);
+                row.put("comment", comment == null || comment.isBlank() ? null : comment.trim());
+                String ty = row.get("type").toLowerCase();
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("(varchar|char)\\((\\d+)\\)").matcher(ty);
+                if (m.matches()) row.put("charLength", m.group(2));
+                java.util.regex.Matcher d = java.util.regex.Pattern
+                        .compile("decimal\\((\\d+),(\\d+)\\)").matcher(ty);
+                if (d.matches()) {
+                    row.put("numericPrecision", d.group(1));
+                    row.put("numericScale", d.group(2));
+                }
+                rows.add(row);
+            }
+            return rows;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException(400, "浏览列失败: " + rootMessage(e));
+        }
     }
 
     private java.sql.Connection open(DataSourceEntity ds) throws Exception {
@@ -200,6 +260,7 @@ public class DataSourceService {
             case "mysql" -> ds.getDatabaseName() == null ? "" : ds.getDatabaseName();
             case "sqlserver" -> "dbo";
             case "oracle" -> ds.getUsername() == null ? "" : ds.getUsername().toUpperCase();
+            case "hive" -> ds.getSchemaName() == null || ds.getSchemaName().isBlank() ? "default" : ds.getSchemaName();
             default -> ds.getSchemaName() == null ? "public" : ds.getSchemaName();
         };
     }

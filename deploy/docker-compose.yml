@@ -37,6 +37,16 @@ services:
     volumes:
       - miniodata:/data
 
+  hive:
+    image: apache/hive:3.1.3
+    container_name: daaspro-hive
+    profiles: ["hive"]
+    environment:
+      SERVICE_NAME: hiveserver2
+      DB_DRIVER: derby
+    ports:
+      - "18000:10000"
+
   etl-worker:
     build: ./etl-worker
     container_name: daaspro-etl-worker

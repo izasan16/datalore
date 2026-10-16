@@ -57,8 +57,8 @@ public final class ColumnDdlBuilder {
             return out;
         }
 
-        // 1. 重命名（先执行，后续语句使用新名）
-        if (renamed) {
+        // 1. 重命名（先执行，后续语句使用新名）；Hive 合并进 CHANGE COLUMN，不单独 RENAME
+        if (renamed && !"hive".equals(dsType)) {
             out.add(switch (dsType) {
                 case "sqlserver" -> "EXEC sp_rename '" + esc(schema) + "." + esc(table) + "."
                         + esc(current.name()) + "', '" + esc(t.name()) + "', 'COLUMN'";
@@ -75,6 +75,12 @@ public final class ColumnDdlBuilder {
                         + (isBlank(t.comment()) ? "" : " COMMENT " + quote(t.comment().trim()));
                 case "sqlserver" -> "ALTER TABLE " + q + " ADD " + colQ + " " + typeStr + notNull;
                 case "oracle" -> "ALTER TABLE " + q + " ADD (" + colQ + " " + typeStr + def + notNull + ")";
+                case "hive" -> {
+                    if (!nullable) throw new BizException(400, "Hive 列不支持 NOT NULL");
+                    if (newDefault != null) throw new BizException(400, "Hive 列不支持默认值");
+                    yield "ALTER TABLE " + q + " ADD COLUMNS (" + colQ + " " + typeStr
+                            + (isBlank(t.comment()) ? "" : " COMMENT " + quote(t.comment().trim())) + ")";
+                }
                 default -> "ALTER TABLE " + q + " ADD COLUMN " + colQ + " " + typeStr + def + notNull;
             });
             if (("postgresql".equals(dsType) || "oracle".equals(dsType)) && !isBlank(t.comment())) {
@@ -139,6 +145,16 @@ public final class ColumnDdlBuilder {
                             + (nullable ? " NULL" : " NOT NULL"));
                 }
             }
+            case "hive" -> {
+                if (nullableChanged && !nullable) throw new BizException(400, "Hive 列不支持 NOT NULL");
+                if (defaultChanged) throw new BizException(400, "Hive 列不支持默认值");
+                if (renamed || typeChanged || commentChanged) {
+                    String cmt = commentChanged && !isBlank(t.comment())
+                            ? " COMMENT " + quote(t.comment().trim()) : "";
+                    out.add("ALTER TABLE " + q + " CHANGE COLUMN " + quoteIdent(dsType, current.name())
+                            + " " + colQ + " " + typeStr + cmt);
+                }
+            }
             default -> throw new BizException(400, "不支持的数据源类型: " + dsType);
         }
         return out;
@@ -196,7 +212,8 @@ public final class ColumnDdlBuilder {
 
     /** MySQL 反引号，SQL Server 方括号，其余双引号。 */
     static String quoteIdent(String dsType, String ident) {
-        if ("mysql".equals(dsType)) return "\u0060" + ident.replace("\u0060", "\u0060\u0060") + "\u0060";
+        if ("mysql".equals(dsType) || "hive".equals(dsType))
+            return "\u0060" + ident.replace("\u0060", "\u0060\u0060") + "\u0060";
         if ("sqlserver".equals(dsType)) return "[" + ident.replace("]", "]]") + "]";
         return "\"" + ident.replace("\"", "\"\"") + "\"";
     }

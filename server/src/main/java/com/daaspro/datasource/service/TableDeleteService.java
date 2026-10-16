@@ -151,6 +151,7 @@ public class TableDeleteService {
             case "mysql" -> ds.getDatabaseName() == null ? "" : ds.getDatabaseName();
             case "sqlserver" -> "dbo";
             case "oracle" -> ds.getUsername() == null ? "" : ds.getUsername().toUpperCase();
+            case "hive" -> ds.getSchemaName() == null || ds.getSchemaName().isBlank() ? "default" : ds.getSchemaName();
             default -> "public";
         };
     }
@@ -162,7 +163,8 @@ public class TableDeleteService {
     }
 
     private String quoteIdent(DataSourceEntity ds, String ident) {
-        if ("mysql".equals(ds.getType())) return "`" + ident.replace("`", "``") + "`";
+        if ("mysql".equals(ds.getType()) || "hive".equals(ds.getType()))
+            return "`" + ident.replace("`", "``") + "`";
         if ("sqlserver".equals(ds.getType())) return "[" + ident.replace("]", "]]") + "]";
         return "\"" + ident.replace("\"", "\"\"") + "\"";
     }

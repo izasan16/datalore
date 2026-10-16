@@ -15,6 +15,7 @@ const TYPE_LABEL: Record<string, string> = {
   mysql: 'MySQL',
   sqlserver: 'SQL Server',
   oracle: 'Oracle',
+  hive: 'Hive',
 };
 
 export default function DatasourcePage() {

@@ -92,12 +92,27 @@ public final class ColumnTypes {
             new TypeDef("date", "DATE", "date", Param.NONE, Family.DATETIME, List.of("date")),
             new TypeDef("timestamp", "TIMESTAMP", "timestamp", Param.NONE, Family.DATETIME, List.of("timestamp")),
             new TypeDef("blob", "BLOB", "blob", Param.NONE, Family.OTHER, List.of("blob"))
+        ),
+        "hive", List.of(
+            new TypeDef("tinyint", "TINYINT", "tinyint", Param.NONE, Family.INT, List.of("tinyint")),
+            new TypeDef("smallint", "SMALLINT", "smallint", Param.NONE, Family.INT, List.of("smallint")),
+            new TypeDef("int", "INT", "int", Param.NONE, Family.INT, List.of("int", "integer")),
+            new TypeDef("bigint", "BIGINT", "bigint", Param.NONE, Family.INT, List.of("bigint")),
+            new TypeDef("float", "FLOAT", "float", Param.NONE, Family.DECIMAL, List.of("float")),
+            new TypeDef("double", "DOUBLE", "double", Param.NONE, Family.DECIMAL, List.of("double")),
+            new TypeDef("decimal", "DECIMAL", "decimal(p,s)", Param.PRECISION, Family.DECIMAL, List.of("decimal")),
+            new TypeDef("string", "STRING", "string", Param.NONE, Family.TEXT, List.of("string")),
+            new TypeDef("varchar", "VARCHAR", "varchar(n)", Param.LENGTH, Family.TEXT, List.of("varchar")),
+            new TypeDef("char", "CHAR", "char(n)", Param.LENGTH, Family.TEXT, List.of("char")),
+            new TypeDef("boolean", "BOOLEAN", "boolean", Param.NONE, Family.BOOL, List.of("boolean")),
+            new TypeDef("timestamp", "TIMESTAMP", "timestamp", Param.NONE, Family.DATETIME, List.of("timestamp")),
+            new TypeDef("date", "DATE", "date", Param.NONE, Family.DATETIME, List.of("date"))
         )
     );
 
     /** 字符类长度上限（varchar/nchar 系）。 */
     private static final Map<String, Integer> LENGTH_LIMIT = Map.of(
-        "mysql", 16383, "sqlserver", 8000, "oracle", 4000, "postgresql", 10485760
+        "mysql", 16383, "sqlserver", 8000, "oracle", 4000, "postgresql", 10485760, "hive", 65535
     );
 
     private ColumnTypes() {}

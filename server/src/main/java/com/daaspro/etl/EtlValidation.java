@@ -71,12 +71,15 @@ public final class EtlValidation {
         int depth = 0;
         boolean inSingle = false;
         boolean inDouble = false;
+        boolean inTick = false;
         for (int i = open; i < text.length(); i++) {
             char c = text.charAt(i);
             if (inSingle) { if (c == '\'') inSingle = false; continue; }
             if (inDouble) { if (c == '"') inDouble = false; continue; }
+            if (inTick) { if (c == '`') inTick = false; continue; }
             if (c == '\'') inSingle = true;
             else if (c == '"') inDouble = true;
+            else if (c == '`') inTick = true;
             else if (c == '(') depth++;
             else if (c == ')') { depth--; if (depth == 0) return i; }
         }
@@ -90,9 +93,10 @@ public final class EtlValidation {
             while (i < name.length() && Character.isWhitespace(name.charAt(i))) i++;
             if (i >= name.length()) break;
             StringBuilder part = new StringBuilder();
-            if (name.charAt(i) == '"') {
+            if (name.charAt(i) == '"' || name.charAt(i) == '`') {
+                char q = name.charAt(i);
                 i++;
-                while (i < name.length() && name.charAt(i) != '"') part.append(name.charAt(i++));
+                while (i < name.length() && name.charAt(i) != q) part.append(name.charAt(i++));
                 if (i >= name.length()) throw new BizException(400, "目标表名不合法");
                 i++;
             } else {
@@ -121,7 +125,7 @@ public final class EtlValidation {
             String[] head = firstToken(trimmed);
             String name = head[0];
             String remainder = head[1];
-            if (name.startsWith("\"")) name = unquote(name);
+            if (name.startsWith("\"") || name.startsWith("`")) name = unquote(name);
             else if (!name.matches("(?i)[\\p{L}_][\\p{L}\\p{N}_$]*")) throw new BizException(400, "字段名不合法: " + name);
             if (CONSTRAINT_KEYWORDS.contains(name.toUpperCase(Locale.ROOT))) continue;
             if (remainder.isBlank()) throw new BizException(400, "字段缺少类型: " + name);
@@ -139,8 +143,9 @@ public final class EtlValidation {
         String t = text.trim();
         int i = 0;
         String token;
-        if (t.startsWith("\"")) {
-            int close = t.indexOf('"', 1);
+        if (t.startsWith("\"") || t.startsWith("`")) {
+            char q = t.charAt(0);
+            int close = t.indexOf(q, 1);
             if (close < 0) throw new BizException(400, "引号不匹配");
             token = t.substring(0, close + 1);
             i = close + 1;
@@ -167,12 +172,15 @@ public final class EtlValidation {
         int depth = 0;
         boolean inSingle = false;
         boolean inDouble = false;
+        boolean inTick = false;
         StringBuilder current = new StringBuilder();
         for (char c : body.toCharArray()) {
             if (inSingle) { current.append(c); if (c == '\'') inSingle = false; continue; }
             if (inDouble) { current.append(c); if (c == '"') inDouble = false; continue; }
+            if (inTick) { current.append(c); if (c == '`') inTick = false; continue; }
             if (c == '\'') { inSingle = true; current.append(c); }
             else if (c == '"') { inDouble = true; current.append(c); }
+            else if (c == '`') { inTick = true; current.append(c); }
             else if (c == '(') { depth++; current.append(c); }
             else if (c == ')') { depth--; current.append(c); }
             else if (c == ',' && depth == 0) { parts.add(current.toString()); current.setLength(0); }

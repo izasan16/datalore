@@ -192,6 +192,13 @@ public class EtlService {
             targetSchema = blankToNull(req.targetSchema());
         }
         EtlValidation.validateFieldMappings(readFields(req.fieldMappingsJson()), readStrings(req.upsertKeysJson()), writeMode);
+        DataSourceEntity targetDs = dataSourceService.getOwned(task.getTargetDatasourceId());
+        if ("UPSERT".equals(writeMode) && "hive".equals(targetDs.getType())) {
+            throw new BizException(400, "Hive 目标不支持更新插入（UPSERT），请改用覆盖或追加");
+        }
+        if (ddl != null && "hive".equals(targetDs.getType())) {
+            ddl = hiveCreateDdl(targetSchema, targetTable, EtlValidation.parseCreateTable(req.createTableDdl()));
+        }
         EtlValidation.rejectSameTable(task.getSourceDatasourceId(), blankToNull(req.sourceSchema()), blankToNull(req.sourceTable()),
                 task.getTargetDatasourceId(), targetSchema, targetTable);
 
@@ -210,7 +217,31 @@ public class EtlService {
     }
 
     private String defaultSchema(DataSourceEntity ds) {
+        if ("hive".equals(ds.getType())) {
+            return ds.getSchemaName() == null || ds.getSchemaName().isBlank() ? "default" : ds.getSchemaName();
+        }
         return ds.getSchemaName() == null || ds.getSchemaName().isBlank() ? "public" : ds.getSchemaName();
+    }
+
+    /** Hive 目标自动建表：把用户建表语句重写为 Hive 方言（反引号 + Hive 类型）。 */
+    private String hiveCreateDdl(String schema, String table, EtlValidation.ParsedCreateTable parsed) {
+        String cols = parsed.columns().stream()
+                .map(c -> "`" + c.name().replace("`", "``") + "` " + hiveType(c.platformType()))
+                .reduce((a, b) -> a + ", " + b).orElse("");
+        String q = (schema == null || schema.isBlank() ? "" : "`" + schema.replace("`", "``") + "`.")
+                + "`" + table.replace("`", "``") + "`";
+        return "CREATE TABLE " + q + " (" + cols + ")";
+    }
+
+    private String hiveType(String platform) {
+        return switch (platform == null ? "text" : platform) {
+            case "bigint" -> "BIGINT";
+            case "numeric" -> "DECIMAL(18,4)";
+            case "timestamp" -> "TIMESTAMP";
+            case "date" -> "DATE";
+            case "boolean" -> "BOOLEAN";
+            default -> "STRING";
+        };
     }
 
     private void validateTaskReq(TaskReq req) {

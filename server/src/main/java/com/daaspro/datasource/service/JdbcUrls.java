@@ -131,6 +131,31 @@ public enum JdbcUrls {
                     + " AND cons.owner = cols.owner"
                     + " WHERE cons.constraint_type = 'P' AND cons.owner = '"
                     + esc(schema) + "' AND cons.table_name = '" + esc(table) + "' ORDER BY cols.position";
+        }
+    },
+    HIVE {
+        @Override
+        public String url(String host, int port, String db, String schema) {
+            return "jdbc:hive2://" + host + ":" + port + (db == null || db.isBlank() ? "/default" : "/" + db);
+        }
+        @Override
+        public int defaultPort() { return 10000; }
+        @Override
+        public String listTablesSql(String schema) {
+            return "SHOW TABLES IN `" + escId(schema) + "`";
+        }
+        @Override
+        public String listColumnsSql(String schema, String table) {
+            return "DESCRIBE `" + escId(schema) + "`.`" + escId(table) + "`";
+        }
+        @Override
+        public String listSchemasSql() {
+            return "SHOW DATABASES";
+        }
+        @Override
+        public String primaryKeySql(String schema, String table) {
+            // Hive 表无主键约束，调用方需按空主键处理
+            return null;
         }    };
 
     public abstract String url(String host, int port, String db, String schema);
@@ -153,10 +178,15 @@ public enum JdbcUrls {
             case "mysql" -> MYSQL;
             case "sqlserver" -> SQLSERVER;
             case "oracle" -> ORACLE;
+            case "hive" -> HIVE;
             default -> throw new BizException(400, "不支持的数据源类型: " + type);
         };
     }
 
+    /** Hive 标识符转义：反引号成对出现。 */
+    private static String escId(String s) {
+        return s.replace("`", "``");
+    }
     private static String esc(String s) {
         return s.replace("'", "''");
     }

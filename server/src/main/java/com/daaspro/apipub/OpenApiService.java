@@ -122,6 +122,7 @@ public class OpenApiService {
 
     private OpenResult queryTable(Resolved r, Map<String, String> queryParams,
                                   String pageStr, String sizeStr, String orderBy, String order) {
+        String dsType = r.datasource().getType();
         List<String> exposed = pubService.parseJson(r.api().getColumns());
         Set<String> exposedSet = exposed.stream().collect(Collectors.toSet());
         List<String> filters = pubService.parseJson(r.api().getFilterColumns());
@@ -139,15 +140,15 @@ public class OpenApiService {
             effective.put(e.getKey(), e.getValue());
         }
 
-        String cols = exposed.stream().map(c -> quote(c)).collect(Collectors.joining(", "));
+        String cols = exposed.stream().map(c -> quote(dsType, c)).collect(Collectors.joining(", "));
         String schema = r.api().getSchemaName();
         String table = schema == null || schema.isBlank()
-                ? quote(r.api().getTableName())
-                : quote(schema) + "." + quote(r.api().getTableName());
+                ? quote(dsType, r.api().getTableName())
+                : quote(dsType, schema) + "." + quote(dsType, r.api().getTableName());
         String where = "";
         List<String> bind = new ArrayList<>();
         if (!effective.isEmpty()) {
-            where = " WHERE " + effective.keySet().stream().map(c -> quote(c) + " = ?")
+            where = " WHERE " + effective.keySet().stream().map(c -> quote(dsType, c) + " = ?")
                     .collect(Collectors.joining(" AND "));
             bind.addAll(effective.values());
         }
@@ -157,7 +158,7 @@ public class OpenApiService {
                 throw new OpenApiException(400, "order_by 必须是暴露列");
             }
             boolean desc = "desc".equalsIgnoreCase(order);
-            orderSql = " ORDER BY " + quote(orderBy) + (desc ? " DESC" : " ASC");
+            orderSql = " ORDER BY " + quote(dsType, orderBy) + (desc ? " DESC" : " ASC");
         }
 
         DataSource pool = connectionManager.pool(r.datasource(), cipher.decrypt(r.datasource().getPasswordEnc()));
@@ -169,15 +170,19 @@ public class OpenApiService {
                     total = rs.next() ? rs.getLong(1) : 0;
                 }
             }
+            boolean hive = "hive".equals(dsType);
+            int skip = hive ? (page - 1) * size : 0;
             List<List<String>> rows = new ArrayList<>();
             try (PreparedStatement st = conn.prepareStatement(
-                    "SELECT " + cols + " FROM " + table + where + orderSql + " LIMIT ? OFFSET ?")) {
+                    "SELECT " + cols + " FROM " + table + where + orderSql
+                            + (hive ? " LIMIT ?" : " LIMIT ? OFFSET ?"))) {
                 int idx = 1;
                 for (String v : bind) st.setString(idx++, v);
-                st.setInt(idx++, size);
-                st.setInt(idx, (page - 1) * size);
+                st.setInt(idx++, hive ? page * size : size);
+                if (!hive) st.setInt(idx, (page - 1) * size);
                 try (ResultSet rs = st.executeQuery()) {
                     while (rs.next()) {
+                        if (skip > 0) { skip--; continue; }
                         List<String> row = new ArrayList<>();
                         for (int i = 1; i <= exposed.size(); i++) row.add(rs.getString(i));
                         rows.add(row);
@@ -304,7 +309,11 @@ public class OpenApiService {
         return Math.min(n, max);
     }
 
-    private String quote(String ident) {
+    /** MySQL/Hive 反引号，其余双引号。 */
+    private String quote(String dsType, String ident) {
+        if ("mysql".equals(dsType) || "hive".equals(dsType)) {
+            return "`" + ident.replace("`", "``") + "`";
+        }
         return "\"" + ident.replace("\"", "\"\"") + "\"";
     }
 }

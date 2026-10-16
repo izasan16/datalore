@@ -11,6 +11,7 @@ const TYPE_LABEL: Record<string, string> = {
   mysql: 'MySQL',
   sqlserver: 'SQL Server',
   oracle: 'Oracle',
+  hive: 'Hive',
 };
 
 const TYPE_OPTIONS = Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label }));

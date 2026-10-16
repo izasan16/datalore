@@ -108,6 +108,36 @@ class ColumnDdlBuilderTest {
     }
 
     @Test
+    void hiveAddUsesAddColumns() {
+        var target = new Target("add", "code", "varchar", 20, null, null, true, null, "编码");
+        var stmts = ColumnDdlBuilder.build("hive", "default", "t", NAME, target);
+        assertThat(stmts).containsExactly(
+            "ALTER TABLE `default`.`t` ADD COLUMNS (`code` VARCHAR(20) COMMENT '编码')");
+    }
+
+    @Test
+    void hiveUpdateMergesIntoChangeColumn() {
+        var col = new Col("name", "string", true, null, null);
+        var target = new Target("update", "title", "string", null, null, null, true, null, null);
+        var stmts = ColumnDdlBuilder.build("hive", "default", "t", col, target);
+        assertThat(stmts).containsExactly(
+            "ALTER TABLE `default`.`t` CHANGE COLUMN `name` `title` STRING");
+    }
+
+    @Test
+    void hiveRejectsNotNullAndDefault() {
+        var col = new Col("name", "string", true, null, null);
+        assertThatThrownBy(() -> ColumnDdlBuilder.build("hive", "default", "t", col,
+                new Target("update", "name", "string", null, null, null, false, null, null)))
+            .isInstanceOf(BizException.class)
+            .hasMessageContaining("NOT NULL");
+        assertThatThrownBy(() -> ColumnDdlBuilder.build("hive", "default", "t", col,
+                new Target("add", "code", "bigint", null, null, null, true, "1", null)))
+            .isInstanceOf(BizException.class)
+            .hasMessageContaining("默认值");
+    }
+
+    @Test
     void currentTimestampWhitelistAndInvalidLiteral() {
         var col = new Col("created", "TIMESTAMP", true, null, null);
         var stmts = ColumnDdlBuilder.build("postgresql", "public", "t", col,

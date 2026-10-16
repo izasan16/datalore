@@ -84,7 +84,7 @@ public class TableDataService {
         String limitSql = limitClause(ds, size, (pageNo - 1) * size, orderSql);
 
         List<Map<String, String>> pkColumns = primaryKeyColumns(ds, schema, table);
-        boolean deletable = pg || !pkColumns.isEmpty();
+        boolean deletable = pg || (!"hive".equals(ds.getType()) && !pkColumns.isEmpty());
 
         try (Connection conn = open(ds)) {
             long total;
@@ -108,7 +108,9 @@ public class TableDataService {
                     if ("__ctid".equals(label)) { ctidIdx = i; continue; }
                     names.add(label);
                 }
+                int hiveSkip = "hive".equals(ds.getType()) ? (pageNo - 1) * size : 0;
                 while (rs.next()) {
+                    if (hiveSkip > 0) { hiveSkip--; continue; }
                     List<String> row = new ArrayList<>();
                     Map<String, String> byName = new LinkedHashMap<>();
                     for (int i = 1; i <= n; i++) {
@@ -130,7 +132,8 @@ public class TableDataService {
             out.put("page", pageNo);
             out.put("pageSize", size);
             out.put("deletable", deletable);
-            if (!deletable) out.put("deleteReason", "该表无主键，无法定位行");
+            if (!deletable) out.put("deleteReason",
+                    "hive".equals(ds.getType()) ? "Hive 表不支持行删除" : "该表无主键，无法定位行");
             return out;
         } catch (BizException e) {
             throw e;
@@ -190,6 +193,7 @@ public class TableDataService {
         if (rowIds == null || rowIds.isEmpty()) throw new BizException(400, "请先勾选要删除的行");
         if (rowIds.size() > MAX_ROW_IDS) throw new BizException(400, "单次最多删除 " + MAX_ROW_IDS + " 行");
 
+        if ("hive".equals(ds.getType())) throw new BizException(400, "Hive 表不支持行删除");
         boolean pg = "postgresql".equals(ds.getType());
         List<Map<String, String>> pkColumns = pg ? List.of() : primaryKeyColumns(ds, schema, table);
         if (!pg && pkColumns.isEmpty()) throw new BizException(400, "该表无主键，无法定位行");
@@ -256,10 +260,12 @@ public class TableDataService {
                 yield switch (dsType) {
                     case "sqlserver" -> "ALTER TABLE " + q + " ADD " + quoteIdent(ds, column) + " " + t;
                     case "oracle" -> "ALTER TABLE " + q + " ADD (" + quoteIdent(ds, column) + " " + t + ")";
+                    case "hive" -> "ALTER TABLE " + q + " ADD COLUMNS (" + quoteIdent(ds, column) + " " + t + ")";
                     default -> "ALTER TABLE " + q + " ADD COLUMN " + quoteIdent(ds, column) + " " + t;
                 };
             }
             case "dropColumn" -> {
+                if ("hive".equals(dsType)) throw new BizException(400, "Hive 不支持删除字段（需要 REPLACE COLUMNS 重建全表）");
                 validateIdent(column, "列名");
                 List<Map<String, String>> pk = primaryKeyColumns(ds, schema, table);
                 boolean isPk = pk.stream().anyMatch(p -> p.get("name").equalsIgnoreCase(column));
@@ -269,6 +275,11 @@ public class TableDataService {
             case "renameColumn" -> {
                 validateIdent(column, "列名");
                 validateIdent(newColumn, "新列名");
+                if ("hive".equals(dsType)) {
+                    String existingType = hiveColumnType(ds, dsId, table, schema, column);
+                    yield "ALTER TABLE " + q + " CHANGE COLUMN " + quoteIdent(ds, column)
+                            + " " + quoteIdent(ds, newColumn) + " " + existingType;
+                }
                 yield switch (dsType) {
                     case "sqlserver" -> "EXEC sp_rename '" + esc(schema) + "." + esc(table) + "."
                             + esc(column) + "', '" + esc(newColumn) + "', 'COLUMN'";
@@ -279,6 +290,10 @@ public class TableDataService {
             case "alterType" -> {
                 validateIdent(column, "列名");
                 String t = dialectType(dsType, type);
+                if ("hive".equals(dsType)) {
+                    yield "ALTER TABLE " + q + " CHANGE COLUMN " + quoteIdent(ds, column)
+                            + " " + quoteIdent(ds, column) + " " + t;
+                }
                 yield switch (dsType) {
                     case "postgresql" -> "ALTER TABLE " + q + " ALTER COLUMN " + quoteIdent(ds, column)
                             + " TYPE " + t + " USING " + quoteIdent(ds, column) + "::" + t;
@@ -369,6 +384,7 @@ public class TableDataService {
             case "mysql" -> ds.getDatabaseName() == null ? "" : ds.getDatabaseName();
             case "sqlserver" -> "dbo";
             case "oracle" -> ds.getUsername() == null ? "" : ds.getUsername().toUpperCase();
+            case "hive" -> ds.getSchemaName() == null || ds.getSchemaName().isBlank() ? "default" : ds.getSchemaName();
             default -> "public";
         };
     }
@@ -437,11 +453,13 @@ public class TableDataService {
             case "sqlserver" -> (orderSql.isEmpty() ? " ORDER BY (SELECT NULL)" : "")
                     + " OFFSET " + offset + " ROWS FETCH NEXT " + size + " ROWS ONLY";
             case "oracle" -> " OFFSET " + offset + " ROWS FETCH NEXT " + size + " ROWS ONLY";
+            case "hive" -> " LIMIT " + (offset + size);
             default -> " LIMIT " + size + " OFFSET " + offset;
         };
     }
 
     private List<Map<String, String>> primaryKeyColumns(DataSourceEntity ds, String schema, String table) {
+        if ("hive".equals(ds.getType())) return List.of();
         String sql = JdbcUrls.of(ds.getType()).primaryKeySql(schema, table);
         try (Connection conn = open(ds);
              var st = conn.createStatement();
@@ -510,7 +528,7 @@ public class TableDataService {
             case "bigint" -> "BIGINT";
             case "numeric" -> switch (dsType) {
                 case "postgresql" -> "NUMERIC";
-                case "mysql", "sqlserver" -> "DECIMAL(18,4)";
+                case "mysql", "sqlserver", "hive" -> "DECIMAL(18,4)";
                 case "oracle" -> "NUMBER(18,4)";
                 default -> throw new BizException(400, "不支持的数据源类型: " + dsType);
             };
@@ -518,6 +536,7 @@ public class TableDataService {
                 case "postgresql", "mysql" -> "TEXT";
                 case "sqlserver" -> "NVARCHAR(MAX)";
                 case "oracle" -> "CLOB";
+                case "hive" -> "STRING";
                 default -> throw new BizException(400, "不支持的数据源类型: " + dsType);
             };
             case "timestamp" -> switch (dsType) {
@@ -531,6 +550,7 @@ public class TableDataService {
                 case "mysql" -> "TINYINT(1)";
                 case "sqlserver" -> "BIT";
                 case "oracle" -> "NUMBER(1)";
+                case "hive" -> "BOOLEAN";
                 default -> throw new BizException(400, "不支持的数据源类型: " + dsType);
             };
             default -> throw new BizException(400, "不支持的字段类型: " + std);
@@ -544,9 +564,19 @@ public class TableDataService {
     }
 
     private String quoteIdent(DataSourceEntity ds, String ident) {
-        if ("mysql".equals(ds.getType())) return "`" + ident.replace("`", "``") + "`";
+        if ("mysql".equals(ds.getType()) || "hive".equals(ds.getType()))
+            return "`" + ident.replace("`", "``") + "`";
         if ("sqlserver".equals(ds.getType())) return "[" + ident.replace("]", "]]") + "]";
         return "\"" + ident.replace("\"", "\"\"") + "\"";
+    }
+
+    /** Hive CHANGE COLUMN 必须带类型：改名时沿用现有列类型。 */
+    private String hiveColumnType(DataSourceEntity ds, Long dsId, String table, String schema, String column) {
+        return dataSourceService.listColumns(dsId, table, schema).stream()
+                .filter(c -> c.get("name").equalsIgnoreCase(column))
+                .map(c -> c.get("type"))
+                .findFirst()
+                .orElseThrow(() -> new BizException(400, "列不存在: " + column));
     }
 
     /** SQL Server sp_rename 参数转义（单引号翻倍）。 */

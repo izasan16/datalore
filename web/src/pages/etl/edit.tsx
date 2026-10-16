@@ -447,8 +447,21 @@ export default function EtlEditPage() {
                       </>
                     )}
                   </div>
+                ) : mapInputType !== 'TABLE' && mapTargetMode === 'EXISTING' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                    <Form.Item field="targetSchema" label="目标 Schema">
+                      <Select showSearch allowClear placeholder="选择 schema" onChange={onTargetSchemaChange}>
+                        {tgtSchemas.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
+                      </Select>
+                    </Form.Item>
+                    <Form.Item field="targetTable" label="目标表" rules={[{ required: true, message: '请选择或输入目标表' }]}>
+                      <Select showSearch allowCreate placeholder="选择或输入目标表名" onChange={onTargetTableChange}>
+                        {tgtTables.map((s) => <Select.Option key={s.name} value={s.name}>{s.name}</Select.Option>)}
+                      </Select>
+                    </Form.Item>
+                  </div>
                 ) : null}
-              {mapInputType === 'TABLE' && mapTargetMode === 'CREATE' && (
+              {mapTargetMode === 'CREATE' && (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start' }}>
                     <Form.Item field="createTableDdl" label="建表语句" rules={[{ required: true, message: '请输入建表语句' }]}>

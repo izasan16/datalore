@@ -102,6 +102,10 @@ public class ImportedTableService {
             throw new BizException(400, "表名只能包含字母、数字、下划线，且以字母或下划线开头");
         }
         String schema = req.schemaName() == null || req.schemaName().isBlank() ? null : req.schemaName().trim();
+        if (schema == null && req.datasourceId() != null) {
+            DataSourceEntity ds0 = dataSourceService.getOwned(req.datasourceId());
+            if ("hive".equals(ds0.getType())) schema = "default";
+        }
 
         DataSourceEntity target;
         if (req.datasourceId == null) {
@@ -163,7 +167,8 @@ public class ImportedTableService {
     private long createTableAndInsert(DataSourceEntity ds, String schema, String table,
                                     List<String> columns, List<String> types, byte[] csv) {
         String colDefs = IntStream.range(0, columns.size())
-                .mapToObj(i -> quoteIdent(ds, columns.get(i)) + " " + types.get(i))
+                .mapToObj(i -> quoteIdent(ds, columns.get(i)) + " "
+                        + ("hive".equals(ds.getType()) ? hiveType(types.get(i)) : types.get(i)))
                 .reduce((a, b) -> a + ", " + b).orElse("");
         String ddl = "CREATE TABLE " + qualified(ds, schema, table) + " (" + colDefs + ")";
         try (Connection conn = openConnection(ds)) {
@@ -324,12 +329,25 @@ public class ImportedTableService {
         return "\"" + ident.replace("\"", "\"\"") + "\"";
     }
 
-    /** MySQL 用反引号，其余（PG/SQL Server/Oracle）用双引号。 */
+    /** MySQL/Hive 用反引号，其余（PG/SQL Server/Oracle）用双引号。 */
     private String quoteIdent(DataSourceEntity ds, String ident) {
-        if ("mysql".equals(ds.getType())) {
+        if ("mysql".equals(ds.getType()) || "hive".equals(ds.getType())) {
             return "`" + ident.replace("`", "``") + "`";
         }
         return quote(ident);
+    }
+
+    /** 平台标准类型 → Hive 类型（导入建表用）。 */
+    private String hiveType(String std) {
+        String t = std == null ? "string" : std.toLowerCase();
+        if (t.startsWith("bigint")) return "BIGINT";
+        if (t.startsWith("numeric") || t.startsWith("decimal")) return "DECIMAL(18,4)";
+        if (t.startsWith("text")) return "STRING";
+        if (t.startsWith("timestamp")) return "TIMESTAMP";
+        if (t.startsWith("date")) return "DATE";
+        if (t.startsWith("boolean")) return "BOOLEAN";
+        if (t.startsWith("double") || t.startsWith("float")) return "DOUBLE";
+        return "STRING";
     }
 
     /** schema 限定名；schema 为空时落库默认 schema（裸表名）。 */
