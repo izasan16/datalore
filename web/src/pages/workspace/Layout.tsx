@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import {
+  useEffect, useState } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { Layout, Menu, Typography, Button, Avatar } from '@arco-design/web-react';
 import {
   IconStorage,
+  IconBook,
   IconCode,
   IconCloud,
   IconCodeBlock,
@@ -27,6 +29,7 @@ const MENU = [
   { key: 'datamanage', title: '数据管理', icon: <IconCloud /> },
   { key: 'sqllab', title: 'SQL 分析', icon: <IconCode /> },
   { key: 'apipub', title: 'API 发布', icon: <IconCodeBlock /> },
+  { key: 'pyscript', title: 'Python 分析', icon: <IconBook /> },
   { key: 'etl', title: '数据集成', icon: <IconSync /> },
 ];
 

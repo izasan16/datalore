@@ -16,7 +16,9 @@ import java.util.Map;
 @Service
 public class DataSourceService {
 
-    static final List<String> SUPPORTED = List.of("postgresql", "mysql", "sqlserver", "oracle", "hive");
+    static final List<String> COMPUTE_TYPES = List.of("spark", "flink");
+
+    static final List<String> SUPPORTED = List.of("postgresql", "mysql", "sqlserver", "oracle", "hive", "spark", "flink");
 
     private final DataSourceMapper mapper;
     private final AesGcmCipher cipher;
@@ -57,7 +59,7 @@ public class DataSourceService {
         ds.setName(name);
         ds.setType(type);
         ds.setHost(host);
-        ds.setPort(port != null ? port : JdbcUrls.of(type).defaultPort());
+        ds.setPort(port != null ? port : defaultPortFor(type));
         ds.setDatabaseName(databaseName);
         ds.setSchemaName(schemaName);
         ds.setUsername(username);
@@ -103,6 +105,7 @@ public class DataSourceService {
 
     public void testConnection(String type, String host, Integer port, String db, String schema,
                                String username, String password) {
+        if ("spark".equals(type) || "flink".equals(type)) { testComputeEngine(type, host, port); return; }
         String url = JdbcUrls.of(type).url(host, port, db, schema);
         try (var conn = DriverManager.getConnection(url, username, password)) {
             if (!conn.isValid(5)) throw new BizException(400, "连接校验失败");
@@ -115,6 +118,7 @@ public class DataSourceService {
 
     public List<Map<String, String>> listSchemas(Long id) {
         DataSourceEntity ds = getOwned(id);
+        if (COMPUTE_TYPES.contains(ds.getType())) return List.of();
         if ("hive".equals(ds.getType())) {
             try (var conn = open(ds); var st = conn.createStatement(); var rs = st.executeQuery("SHOW DATABASES")) {
                 var rows = new ArrayList<Map<String, String>>();
@@ -140,6 +144,7 @@ public class DataSourceService {
 
     public List<Map<String, String>> listTables(Long id, String schemaParam) {
         DataSourceEntity ds = getOwned(id);
+        if (COMPUTE_TYPES.contains(ds.getType())) return List.of();
         String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
         String sql = JdbcUrls.of(ds.getType()).listTablesSql(schema);
         if ("hive".equals(ds.getType())) {
@@ -168,6 +173,7 @@ public class DataSourceService {
 
     public List<Map<String, String>> listColumns(Long id, String table, String schemaParam) {
         DataSourceEntity ds = getOwned(id);
+        if (COMPUTE_TYPES.contains(ds.getType())) return List.of();
         String schema = schemaParam != null && !schemaParam.isBlank() ? schemaParam.trim() : defaultSchema(ds);
         String sql = JdbcUrls.of(ds.getType()).listColumnsSql(schema, table);
         if ("hive".equals(ds.getType())) {
@@ -263,6 +269,27 @@ public class DataSourceService {
             case "hive" -> ds.getSchemaName() == null || ds.getSchemaName().isBlank() ? "default" : ds.getSchemaName();
             default -> ds.getSchemaName() == null ? "public" : ds.getSchemaName();
         };
+    }
+
+    public 
+    static int defaultPortFor(String type) {
+        return switch (type) {
+            case "spark" -> 8998;
+            case "flink" -> 8081;
+            default -> JdbcUrls.of(type).defaultPort();
+        };
+    }
+
+    private void testComputeEngine(String type, String host, Integer port) {
+        String base = "http://" + host + ":" + (port != null ? port : defaultPortFor(type));
+        String path = "spark".equals(type) ? "/batches" : "/overview";
+        try {
+            var client = java.net.http.HttpClient.newHttpClient();
+            var req = java.net.http.HttpRequest.newBuilder().uri(java.net.URI.create(base + path)).GET().build();
+            var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) throw new BizException(400, "计算引擎连接失败 (HTTP " + resp.statusCode() + ")");
+        } catch (BizException e) { throw e; }
+        catch (Exception e) { throw new BizException(400, "计算引擎连接失败: " + rootMessage(e)); }
     }
 
     public static String rootMessage(Exception e) {

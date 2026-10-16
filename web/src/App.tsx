@@ -9,6 +9,7 @@ import DatasourceCreatePage from './pages/datasource/create';
 import DataManagePage from './pages/datamanage';
 import DataManageNewPage from './pages/datamanage/new';
 import SqlLabPage from './pages/sqllab';
+import PyScriptPage from './pages/pyscript';
 import ApiPubPage from './pages/apipub';
 import ApiPubEditPage from './pages/apipub/edit';
 import ApiPubNewPage from './pages/apipub/new';
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/datamanage" element={<DataManagePage />} />
         <Route path="/datamanage/new" element={<DataManageNewPage />} />
         <Route path="/sqllab" element={<SqlLabPage />} />
+        <Route path="/pyscript" element={<PyScriptPage />} />
         <Route path="/apipub" element={<ApiPubPage />} />
         <Route path="/apipub/new" element={<ApiPubNewPage />} />
         <Route path="/apipub/:id/edit" element={<ApiPubEditPage />} />

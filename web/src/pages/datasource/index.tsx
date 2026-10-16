@@ -16,6 +16,8 @@ const TYPE_LABEL: Record<string, string> = {
   sqlserver: 'SQL Server',
   oracle: 'Oracle',
   hive: 'Hive',
+  spark: 'Spark',
+  flink: 'Flink',
 };
 
 export default function DatasourcePage() {

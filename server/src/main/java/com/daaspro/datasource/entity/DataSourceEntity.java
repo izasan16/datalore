@@ -21,6 +21,7 @@ public class DataSourceEntity {
     private String schemaName;
     private String username;
     private String passwordEnc;
+    private String extraConfig;
     private Integer status;
     private LocalDateTime createdAt;
 }

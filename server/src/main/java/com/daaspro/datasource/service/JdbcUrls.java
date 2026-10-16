@@ -179,6 +179,7 @@ public enum JdbcUrls {
             case "sqlserver" -> SQLSERVER;
             case "oracle" -> ORACLE;
             case "hive" -> HIVE;
+            case "spark", "flink" -> throw new BizException(400, "计算引擎类型不支持 JDBC 访问");
             default -> throw new BizException(400, "不支持的数据源类型: " + type);
         };
     }
