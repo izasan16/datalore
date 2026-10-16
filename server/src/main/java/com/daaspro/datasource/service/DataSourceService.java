@@ -63,7 +63,7 @@ public class DataSourceService {
         ds.setDatabaseName(databaseName);
         ds.setSchemaName(schemaName);
         ds.setUsername(username);
-        ds.setPasswordEnc(cipher.encrypt(password));
+        ds.setPasswordEnc(password != null && !password.isBlank() ? cipher.encrypt(password) : null);
         ds.setStatus(1);
         mapper.insert(ds);
         return ds;

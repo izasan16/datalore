@@ -30,15 +30,15 @@ public class DataSourceController {
     }
 
     public record CreateReq(@NotBlank String name, @NotBlank String type, @NotBlank String host,
-                            Integer port, @NotBlank String databaseName, String schemaName,
-                            @NotBlank String username, @NotBlank String password) {}
+                            Integer port, String databaseName, String schemaName,
+                            String username, String password) {}
 
     public record UpdateReq(String name, String host, Integer port, String databaseName,
                             String schemaName, String username, String password) {}
 
     public record TestReq(@NotBlank String type, @NotBlank String host, Integer port,
-                          @NotBlank String databaseName, String schemaName,
-                          @NotBlank String username, @NotBlank String password) {}
+                          String databaseName, String schemaName,
+                          String username, String password) {}
 
     @GetMapping
     public List<Map<String, Object>> list() {

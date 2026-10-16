@@ -12,6 +12,8 @@ const TYPE_LABEL: Record<string, string> = {
   sqlserver: 'SQL Server',
   oracle: 'Oracle',
   hive: 'Hive',
+  spark: 'Spark',
+  flink: 'Flink',
 };
 
 const TYPE_OPTIONS = Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label }));
@@ -21,10 +23,12 @@ export default function DatasourceCreatePage() {
   const { id } = useParams();
   const editingId = id ? Number(id) : undefined;
   const [saving, setSaving] = useState(false);
+  const [form] = Form.useForm();
+  const selectedType = Form.useWatch('type', form);
+  const isCompute = selectedType === 'spark' || selectedType === 'flink';
   const [testing, setTesting] = useState(false);
   const [loaded, setLoaded] = useState(!editingId);
-  const [form] = Form.useForm();
-
+  
   if (editingId && !loaded) {
     listDatasources().then((list) => {
       const ds = list.find((d) => d.id === editingId);
@@ -43,7 +47,7 @@ export default function DatasourceCreatePage() {
     // 只校验连接相关字段，避免被未填的「名称」阻塞；校验失败 Arco 自动标红
     let v: any;
     try {
-      v = await form.validate(['type', 'host', 'port', 'databaseName', 'schemaName', 'username', 'password']);
+      v = await form.validate(isCompute ? ['type', 'host', 'port'] : ['type', 'host', 'port', 'databaseName', 'schemaName', 'username', 'password']);
     } catch {
       return;
     }
@@ -148,7 +152,7 @@ export default function DatasourceCreatePage() {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item label="数据库" field="databaseName" rules={[{ required: true, message: '请输入数据库名' }]}>
+              <Form.Item label={isCompute ? "数据库名（可选）" : "数据库"} field="databaseName" rules={[{ required: !isCompute, message: '请输入数据库名' }]}>
                 <Input placeholder="database" />
               </Form.Item>
             </Col>
@@ -158,13 +162,13 @@ export default function DatasourceCreatePage() {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
-              <Form.Item label="用户名" field="username" rules={[{ required: true, message: '请输入用户名' }]}>
+              <Form.Item label="用户名" field="username" rules={[{ required: !isCompute, message: '请输入用户名' }]}>
                 <Input placeholder="用户名" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>
               <Form.Item label={editingId ? '密码（留空保持不变）' : '密码'} field="password"
-                rules={editingId ? [] : [{ required: true, message: '请输入密码' }]}>
+                rules={editingId ? [] : [{ required: !isCompute, message: '请输入密码' }]}>
                 <Input.Password placeholder={editingId ? '留空保持原密码' : '密码'} />
               </Form.Item>
             </Col>
