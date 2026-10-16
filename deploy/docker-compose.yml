@@ -47,6 +47,24 @@ services:
     ports:
       - "18000:10000"
 
+
+  spark:
+    image: bitnami/spark:3.5.1
+    container_name: daaspro-spark
+    profiles: ["spark"]
+    environment:
+      SPARK_MODE: master
+    ports:
+      - "18081:8080"  # Spark UI
+
+
+  flink:
+    image: flink:1.18
+    container_name: daaspro-flink
+    profiles: ["flink"]
+    ports:
+      - "18082:8081"  # Flink Web UI / REST
+
   etl-worker:
     build: ./etl-worker
     container_name: daaspro-etl-worker
