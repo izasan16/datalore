@@ -77,6 +77,9 @@ export default function PyScriptPage() {
   const logRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logOffsetRef = useRef(0);
+  const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  // Monaco 在百分比高度容器里测不到尺寸（会塌成 5px），用视口像素高兜底
+  const editorH = Math.round(Math.min(400, Math.max(200, window.innerHeight * 0.42)));
 
   const computeDs = dsList.filter((d) => d.type === 'spark' || d.type === 'flink');
   const currentDs = computeDs.find((d) => d.id === (detail?.datasourceId ?? selectedDs));
@@ -134,6 +137,18 @@ export default function PyScriptPage() {
       } catch { /* retry next tick */ }
     }, 2000);
   }, [currentId]);
+
+  useEffect(() => {
+    const relayout = () => editorRef.current?.layout();
+    const t1 = window.setTimeout(relayout, 50);
+    const t2 = window.setTimeout(relayout, 300);
+    window.addEventListener('resize', relayout);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener('resize', relayout);
+    };
+  }, [editorH]);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
@@ -298,13 +313,14 @@ export default function PyScriptPage() {
           </Space>
         </Card>
 
-        <Card size="small" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ flex: 1, minHeight: 120 }}>
+        <Card size="small" style={{ flex: '0 0 auto' }}>
+          <div style={{ height: editorH }}>
             <Editor
               language="python"
               theme="vs"
               value={content}
               onChange={(v) => setContent(v ?? '')}
+              onMount={(editor) => { editorRef.current = editor; }}
               options={{
                 minimap: { enabled: false },
                 fontSize: 13,
@@ -313,7 +329,7 @@ export default function PyScriptPage() {
                 wordWrap: 'on',
                 tabSize: 4,
               }}
-              height="100%"
+              height={editorH}
             />
           </div>
         </Card>
