@@ -245,33 +245,58 @@ export default function PyScriptPage() {
   if (loading) return <div style={{ padding: 40 }}><Spin /></div>;
 
   return (
-    <div style={{ display: 'flex', gap: 12, height: 'calc(100vh - 60px)', padding: '12px 16px' }}>
+    <div className="page-fill">
       {/* Left: script list + HDFS tree */}
-      <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Card size="small" title="脚本" extra={<Button size="mini" type="primary" icon={<IconPlus />} onClick={() => setNewDialog(true)}>新建</Button>} style={{ flex: '0 0 auto' }}>
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-            {scripts.length === 0 && <Text type="secondary">暂无脚本</Text>}
-            {scripts.map((s) => (
-              <div key={s.id} style={{
-                padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
-                background: s.id === currentId ? 'var(--color-fill-2)' : undefined,
-              }}
-                onClick={() => setCurrentId(s.id)}
-              >
-                {renameId === s.id ? (
-                  <Input size="mini" value={renameValue} onChange={setRenameValue}
-                    onPressEnter={handleRename} onBlur={handleRename} autoFocus />
-                ) : (
-                  <span onDoubleClick={() => { setRenameId(s.id); setRenameValue(s.name); }}>{s.name}</span>
-                )}
-                <Button size="mini" type="text" icon={<IconDelete />} style={{ float: 'right', color: 'var(--color-text-3)' }}
-                  onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }} />
-              </div>
-            ))}
-          </div>
+      <div style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
+        <Card title="脚本" className="card-fill" style={{ flexShrink: 0, maxHeight: 300 }} bodyStyle={{ padding: '4px 0', overflowY: 'auto' }} extra={<Button size="mini" type="primary" icon={<IconPlus />} onClick={() => setNewDialog(true)}>新建</Button>}>
+          {scripts.length === 0 && <Text type="secondary" style={{ display: 'block', padding: '8px 16px' }}>还没有脚本，点「新建」开始</Text>}
+            {scripts.map((s) => {
+              const selected = s.id === currentId;
+              return (
+                <div
+                  key={s.id}
+                  className={`script-item${selected ? ' selected' : ''}`}
+                  style={{ background: selected ? 'var(--color-primary-light-1)' : undefined }}
+                  onClick={() => setCurrentId(s.id)}
+                  onDoubleClick={(e) => { e.stopPropagation(); setRenameId(s.id); setRenameValue(s.name); }}
+                  title="双击重命名"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    {renameId === s.id ? (
+                      <Input size="mini" value={renameValue} autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={setRenameValue}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenameId(null); }}
+                        onBlur={handleRename}
+                        style={{ flex: 1, minWidth: 0 }} />
+                    ) : (
+                      <span style={{
+                        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        color: selected ? 'var(--daaspro-primary)' : undefined,
+                        fontWeight: selected ? 600 : 400,
+                      }}>
+                        {s.name}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="script-item-del"
+                      title="删除脚本"
+                      style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', lineHeight: 1 }}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                    >
+                      <IconDelete />
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-3)' }}>
+                    {s.updatedAt.replace('T', ' ').slice(5, 16)}
+                  </div>
+                </div>
+              );
+            })}
         </Card>
         {isSpark && detail != null && (
-          <Card size="small" title="HDFS 文件" style={{ flex: 1, overflow: 'auto' }}>
+          <Card title="HDFS 文件" className="card-fill" style={{ flex: 1, minHeight: 0 }} bodyStyle={{ padding: 4, overflowY: 'auto' }}>
             <Spin loading={hdfsLoading} style={{ display: 'block' }}>
               {hdfsTree.length === 0 && !hdfsLoading && <Text type="secondary">无法加载目录</Text>}
               <Tree
