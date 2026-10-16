@@ -176,9 +176,8 @@ public enum JdbcUrls {
         return switch (type) {
             case "postgresql" -> POSTGRESQL;
             case "mysql" -> MYSQL;
-            case "sqlserver" -> SQLSERVER;
-            case "oracle" -> ORACLE;
-            case "hive" -> HIVE;
+            case "sqlserver", "oracle" -> throw new BizException(400, "暂不支持的数据源类型: " + type);
+                        case "hive" -> HIVE;
             case "spark", "flink" -> throw new BizException(400, "计算引擎类型不支持 JDBC 访问");
             default -> throw new BizException(400, "不支持的数据源类型: " + type);
         };

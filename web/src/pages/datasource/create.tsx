@@ -9,8 +9,6 @@ const { Row, Col } = Grid;
 const TYPE_LABEL: Record<string, string> = {
   postgresql: 'PostgreSQL',
   mysql: 'MySQL',
-  sqlserver: 'SQL Server',
-  oracle: 'Oracle',
   hive: 'Hive',
   spark: 'Spark',
   flink: 'Flink',

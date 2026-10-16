@@ -18,7 +18,7 @@ public class DataSourceService {
 
     static final List<String> COMPUTE_TYPES = List.of("spark", "flink");
 
-    static final List<String> SUPPORTED = List.of("postgresql", "mysql", "sqlserver", "oracle", "hive", "spark", "flink");
+    static final List<String> SUPPORTED = List.of("postgresql", "mysql", "hive", "spark", "flink");
 
     private final DataSourceMapper mapper;
     private final AesGcmCipher cipher;
