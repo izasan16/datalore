@@ -272,7 +272,7 @@ export default function PyScriptPage() {
                     ) : (
                       <span style={{
                         flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        color: selected ? 'var(--daaspro-primary)' : undefined,
+                        color: selected ? 'var(--Datalore-primary)' : undefined,
                         fontWeight: selected ? 600 : 400,
                       }}>
                         {s.name}

@@ -9,8 +9,8 @@
     <version>3.3.5</version>
     <relativePath/>
   </parent>
-  <groupId>com.daaspro</groupId>
-  <artifactId>daaspro-server</artifactId>
+  <groupId>com.Datalore</groupId>
+  <artifactId>Datalore-server</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <properties>
     <java.version>17</java.version>

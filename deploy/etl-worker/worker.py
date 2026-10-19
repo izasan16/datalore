@@ -24,14 +24,14 @@ from typing import Any
 
 import psycopg
 
-TOKEN = os.environ.get("DAASPRO_WORKER_TOKEN", "dev-worker-token")
-HOST = os.environ.get("DAASPRO_WORKER_HOST", "0.0.0.0")
-PORT = int(os.environ.get("DAASPRO_WORKER_PORT", "8090"))
+TOKEN = os.environ.get("Datalore_WORKER_TOKEN", "dev-worker-token")
+HOST = os.environ.get("Datalore_WORKER_HOST", "0.0.0.0")
+PORT = int(os.environ.get("Datalore_WORKER_PORT", "8090"))
 LOG = logging.getLogger("etl-worker")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 PARAM = re.compile(r"(?<!:):([A-Za-z_][A-Za-z0-9_]*)")
 # 容器内运行时，回环地址指向容器自身；改写为宿主机网关才能连到宿主端口映射
-GATEWAY_REWRITE = os.environ.get("DAASPRO_WORKER_GATEWAY_REWRITE", "1") == "1"
+GATEWAY_REWRITE = os.environ.get("Datalore_WORKER_GATEWAY_REWRITE", "1") == "1"
 HIVE_DRIVER = "org.apache.hive.jdbc.HiveDriver"
 HIVE_JDBC_JAR = os.environ.get("HIVE_JDBC_JAR", "/opt/etl/hive-jdbc-standalone.jar")
 CREATE_TABLE = re.compile(

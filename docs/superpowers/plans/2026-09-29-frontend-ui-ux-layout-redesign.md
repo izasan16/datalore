@@ -2,7 +2,7 @@
 
 > For agentic workers: use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
-**Goal:** Reorganize the existing daaspro frontend so content-driven pages no longer use oversized empty cards, while preserving current data, API publishing, and authorized-application workflows.
+**Goal:** Reorganize the existing Datalore frontend so content-driven pages no longer use oversized empty cards, while preserving current data, API publishing, and authorized-application workflows.
 
 **Architecture:** Keep React Router, Arco Design, existing API modules, and the workspace shell. Add shared layout/state classes, then update pages in dependency order: shell, dashboard, data pages, SQL Lab, and API pages. No backend or API contract changes.
 
@@ -24,9 +24,9 @@
 
 Verification commands:
 
-    Set-Location D:\极智\daaspro\web
+    Set-Location D:\极智\Datalore\web
     npm run build
-    Set-Location D:\极智\daaspro
+    Set-Location D:\极智\Datalore
     git diff --check
 
 Expected: build exits 0 and diff check reports no whitespace errors.
@@ -40,7 +40,7 @@ Files:
 
 - [ ] Add page-level CSS primitives: page-shell, page-header, page-header-main, page-header-actions, page-section, page-empty, page-error, compact-card-grid, compact-entry-card, and bounded-checks. Use existing color variables, a 20px page rhythm, content-driven height by default, and a max-width: 900px media query that stacks grids and lets header actions wrap. bounded-checks must use max-height: 220px; overflow-y: auto.
 - [ ] Keep card-fill and page-fill for SQL Lab and the data-management tree, and add a comment that these are only for editors, results, trees, or regions requiring an internal scroll area. Do not make generic cards full height.
-- [ ] Run npm run build from D:\极智\daaspro\web. Expected: PASS.
+- [ ] Run npm run build from D:\极智\Datalore\web. Expected: PASS.
 - [ ] Commit: git add web/src/global.css; git commit -m "style: add shared content-driven page layout rules".
 
 ### Task 2: Simplify the workspace shell and dashboard
@@ -116,7 +116,7 @@ Files:
 
 - [ ] Inspect /workspace, /datasource, /datamanage, /sqllab, /apipub, /apipub/new, /apipub/[id], and /apipub/apps at desktop width and below 900px. Confirm headers wrap, grids stack, tables scroll when necessary, and primary actions remain visible.
 - [ ] Every icon-only refresh/copy/delete/action button gets title and aria-label. Every clickable row action is a button or router link. Status indicators include text, not color alone.
-- [ ] Run from D:\极智\daaspro\web: npm run build. Run from D:\极智\daaspro: git diff --check and git status --short. Expected: build succeeds and diff check is clean.
+- [ ] Run from D:\极智\Datalore\web: npm run build. Run from D:\极智\Datalore: git diff --check and git status --short. Expected: build succeeds and diff check is clean.
 - [ ] Commit: git add web/src/global.css web/src/pages; git commit -m "fix: complete frontend layout and accessibility pass".
 
 ## Plan self-review

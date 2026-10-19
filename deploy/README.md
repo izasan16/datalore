@@ -19,8 +19,8 @@ vi .env
 必填项：
 - `POSTGRES_PASSWORD`：PostgreSQL 密码
 - `MINIO_ROOT_PASSWORD`：MinIO 密码
-- `DAASPRO_ETL_WORKER_TOKEN`：Worker 通信 Token（随机字符串）
-- `DAASPRO_CRYPTO_KEY`：数据源密码加密密钥，用以下命令生成：
+- `Datalore_ETL_WORKER_TOKEN`：Worker 通信 Token（随机字符串）
+- `Datalore_CRYPTO_KEY`：数据源密码加密密钥，用以下命令生成：
   ```bash
   openssl rand -base64 32
   ```

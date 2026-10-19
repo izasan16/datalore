@@ -15,9 +15,9 @@ export default function RegisterPage() {
       const slug = await registerTenant(v.name, v.adminUsername, v.adminPassword);
       // 注册即登录：后端返回 slug 并直接登录
       const r = await login(v.adminUsername, v.adminPassword);
-      localStorage.setItem('daaspro.token', r.token);
-      localStorage.setItem('daaspro.user', JSON.stringify(r.user));
-      localStorage.setItem('daaspro.slug', slug);
+      localStorage.setItem('Datalore.token', r.token);
+      localStorage.setItem('Datalore.user', JSON.stringify(r.user));
+      localStorage.setItem('Datalore.slug', slug);
       Message.success('工作区已创建');
       nav('/workspace');
     } catch (e: any) {

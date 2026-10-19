@@ -1,4 +1,4 @@
-# 子计划 1：daaspro 项目骨架
+# 子计划 1：Datalore 项目骨架
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -38,10 +38,10 @@ logs/
 - [ ] **Step 2: 写 deploy/.env.example**
 
 ```env
-POSTGRES_PASSWORD=daaspro_dev_2026
+POSTGRES_PASSWORD=Datalore_dev_2026
 REDIS_PASSWORD=
-MINIO_ROOT_USER=daaspro
-MINIO_ROOT_PASSWORD=daaspro_dev_2026
+MINIO_ROOT_USER=Datalore
+MINIO_ROOT_PASSWORD=Datalore_dev_2026
 ```
 
 - [ ] **Step 3: 写 deploy/docker-compose.yml**
@@ -50,24 +50,24 @@ MINIO_ROOT_PASSWORD=daaspro_dev_2026
 services:
   postgres:
     image: postgres:16
-    container_name: daaspro-postgres
+    container_name: Datalore-postgres
     environment:
-      POSTGRES_DB: daaspro
-      POSTGRES_USER: daaspro
+      POSTGRES_DB: Datalore
+      POSTGRES_USER: Datalore
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "15432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U daaspro"]
+      test: ["CMD-SHELL", "pg_isready -U Datalore"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7
-    container_name: daaspro-redis
+    container_name: Datalore-redis
     ports:
       - "16379:6379"
     volumes:
@@ -75,7 +75,7 @@ services:
 
   minio:
     image: minio/minio
-    container_name: daaspro-minio
+    container_name: Datalore-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -95,7 +95,7 @@ volumes:
 - [ ] **Step 4: 写 README.md（简要：项目定位一句话 + 启动命令）**
 
 ```markdown
-# daaspro
+# Datalore
 
 面向数据分析师和数据开发工程师的多租户 SaaS 数据平台。设计见 `docs/架构设计.md`，需求共识见 `docs/重构需求共识.md`。
 
@@ -131,11 +131,11 @@ git commit -m "chore: repo skeleton with docker compose infra"
 
 **Files:**
 - Create: `server/pom.xml`
-- Create: `server/src/main/java/com/daaspro/DaasproApplication.java`
-- Create: `server/src/main/java/com/daaspro/common/web/HealthController.java`
+- Create: `server/src/main/java/com/Datalore/DataloreApplication.java`
+- Create: `server/src/main/java/com/Datalore/common/web/HealthController.java`
 - Create: `server/src/main/resources/application.yml`
 - Create: `server/src/main/resources/db/migration/V1__baseline.sql`
-- Create: `server/src/test/java/com/daaspro/HealthIT.java`
+- Create: `server/src/test/java/com/Datalore/HealthIT.java`
 
 - [ ] **Step 1: 写 server/pom.xml**
 
@@ -151,8 +151,8 @@ git commit -m "chore: repo skeleton with docker compose infra"
     <version>3.3.5</version>
     <relativePath/>
   </parent>
-  <groupId>com.daaspro</groupId>
-  <artifactId>daaspro-server</artifactId>
+  <groupId>com.Datalore</groupId>
+  <artifactId>Datalore-server</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <properties>
     <java.version>17</java.version>
@@ -212,20 +212,20 @@ git commit -m "chore: repo skeleton with docker compose infra"
 </project>
 ```
 
-- [ ] **Step 2: 写 DaasproApplication.java**
+- [ ] **Step 2: 写 DataloreApplication.java**
 
 ```java
-package com.daaspro;
+package com.Datalore;
 
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-@MapperScan("com.daaspro.**.mapper")
-public class DaasproApplication {
+@MapperScan("com.Datalore.**.mapper")
+public class DataloreApplication {
     public static void main(String[] args) {
-        SpringApplication.run(DaasproApplication.class, args);
+        SpringApplication.run(DataloreApplication.class, args);
     }
 }
 ```
@@ -242,11 +242,11 @@ server:
 
 spring:
   application:
-    name: daaspro
+    name: Datalore
   datasource:
-    url: jdbc:postgresql://localhost:15432/daaspro
-    username: daaspro
-    password: daaspro_dev_2026
+    url: jdbc:postgresql://localhost:15432/Datalore
+    username: Datalore
+    password: Datalore_dev_2026
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -255,7 +255,7 @@ spring:
       host: localhost
       port: 16379
 
-daaspro:
+Datalore:
   version: 0.1.0
 
 sa-token:
@@ -266,7 +266,7 @@ sa-token:
 - [ ] **Step 4: 写 HealthController.java（先写实现，测试在下一步 TDD 校验）**
 
 ```java
-package com.daaspro.common.web;
+package com.Datalore.common.web;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -279,7 +279,7 @@ import java.util.Map;
 @RequestMapping("/api")
 public class HealthController {
 
-    @Value("${daaspro.version}")
+    @Value("${Datalore.version}")
     private String version;
 
     @GetMapping("/health")
@@ -299,7 +299,7 @@ SELECT 1;
 - [ ] **Step 6: 写 HealthIT.java（集成测试，需 PG 在跑）**
 
 ```java
-package com.daaspro;
+package com.Datalore;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -351,7 +351,7 @@ git commit -m "feat(server): spring boot skeleton with flyway baseline and /api/
 
 ```json
 {
-  "name": "daaspro-web",
+  "name": "Datalore-web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -428,7 +428,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>daaspro</title>
+    <title>Datalore</title>
   </head>
   <body>
     <div id="root"></div>
@@ -464,7 +464,7 @@ export default function App() {
   }, []);
   return (
     <Card style={{ maxWidth: 480, margin: '80px auto' }}>
-      <Typography.Title heading={3}>daaspro</Typography.Title>
+      <Typography.Title heading={3}>Datalore</Typography.Title>
       <Typography.Text>后端版本：</Typography.Text>
       <Tag color="arcoblue">{version}</Tag>
     </Card>

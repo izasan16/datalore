@@ -38,14 +38,14 @@ export default function WorkspacePage() {
               }
             }}
           >
-            <div style={{ fontSize: 24, color: 'var(--daaspro-primary)', marginBottom: 12 }}>{e.icon}</div>
+            <div style={{ fontSize: 24, color: 'var(--Datalore-primary)', marginBottom: 12 }}>{e.icon}</div>
             <Typography.Title heading={6} style={{ margin: '0 0 6px' }}>
               {e.title}
             </Typography.Title>
             <Typography.Text type="secondary" style={{ display: 'block', fontSize: 13, lineHeight: 1.6 }}>
               {e.desc}
             </Typography.Text>
-            <Typography.Text style={{ fontSize: 13, color: 'var(--daaspro-primary)' }}>
+            <Typography.Text style={{ fontSize: 13, color: 'var(--Datalore-primary)' }}>
               进入 <IconRight />
             </Typography.Text>
           </div>

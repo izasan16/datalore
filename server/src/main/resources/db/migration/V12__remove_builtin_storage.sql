@@ -1,5 +1,5 @@
 -- 移除默认存储库：清理内置源及其业务数据，删除相关列，回收租户数据 schema。
--- 破坏性清理，执行前需 pg_dump 备份 daaspro 库。
+-- 破坏性清理，执行前需 pg_dump 备份 Datalore 库。
 
 DELETE FROM api_grant WHERE api_id IN (
     SELECT p.id FROM api_pub p

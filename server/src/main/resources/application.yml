@@ -7,11 +7,11 @@ server:
 
 spring:
   application:
-    name: daaspro
+    name: Datalore
   datasource:
-    url: jdbc:postgresql://localhost:15432/daaspro
-    username: daaspro
-    password: daaspro_dev_2026
+    url: jdbc:postgresql://localhost:15432/datalore
+    username: datalore
+    password: datalore_dev_2026
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -20,22 +20,22 @@ spring:
       host: localhost
       port: 16379
 
-daaspro:
+Datalore:
   version: 0.1.0
-  # dev 专用密钥（32 字节 base64 = daaspro_dev_key_32_bytes!!!!!!!!）。生产用环境变量 DAASPRO_CRYPTO_KEY 覆盖。
+  # dev 专用密钥（32 字节 base64 = Datalore_dev_key_32_bytes!!!!!!!!）。生产用环境变量 Datalore_CRYPTO_KEY 覆盖。
   crypto-key: "ZGFhc3Byb19kZXZfa2V5XzMyX2J5dGVzISEhISEhISE="
   minio:
     endpoint: http://localhost:19000
-    access-key: daaspro
-    secret-key: daaspro_dev_2026
-    bucket: daaspro-staging
-    init-bucket: ${DAASPRO_MINIO_INIT_BUCKET:true}
+    access-key: datalore
+    secret-key: datalore_dev_2026
+    bucket: datalore-staging
+    init-bucket: ${DATALORE_MINIO_INIT_BUCKET:true}
   sql:
     max-rows: 10000      # SQL 网关单次结果行数上限
     max-seconds: 30      # SQL 网关语句超时（秒）
   etl:
-    worker-url: ${DAASPRO_ETL_WORKER_URL:http://localhost:18090}
-    worker-token: ${DAASPRO_ETL_WORKER_TOKEN:dev-worker-token}
+    worker-url: ${DATALORE_ETL_WORKER_URL:http://localhost:18090}
+    worker-token: ${DATALORE_ETL_WORKER_TOKEN:dev-worker-token}
 
 sa-token:
   token-name: Authorization

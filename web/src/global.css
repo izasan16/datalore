@@ -1,11 +1,11 @@
-/* daaspro 全局设计令牌 + 认证页样式 */
+/* Datalore 全局设计令牌 + 认证页样式 */
 
 :root {
-  --daaspro-primary: #1e58c9;
-  --daaspro-primary-deep: #12357a;
-  --daaspro-primary-ink: #0c2a5e;
-  --daaspro-text-main: #1d2129;
-  --daaspro-text-muted: #4e5969;
+  --Datalore-primary: #1e58c9;
+  --Datalore-primary-deep: #12357a;
+  --Datalore-primary-ink: #0c2a5e;
+  --Datalore-text-main: #1d2129;
+  --Datalore-text-muted: #4e5969;
 }
 
 html,
@@ -34,7 +34,7 @@ body,
   background:
     radial-gradient(1200px 600px at 85% -10%, rgba(90, 160, 255, 0.35), transparent 60%),
     radial-gradient(900px 500px at -10% 110%, rgba(58, 226, 199, 0.18), transparent 55%),
-    linear-gradient(160deg, var(--daaspro-primary-ink) 0%, var(--daaspro-primary-deep) 55%, #0e2f66 100%);
+    linear-gradient(160deg, var(--Datalore-primary-ink) 0%, var(--Datalore-primary-deep) 55%, #0e2f66 100%);
   overflow: hidden;
 }
 
@@ -135,13 +135,13 @@ body,
 .auth-panel-inner h2 {
   font-size: 24px;
   font-weight: 600;
-  color: var(--daaspro-text-main);
+  color: var(--Datalore-text-main);
   margin: 0 0 6px;
 }
 
 .auth-panel-sub {
   font-size: 14px;
-  color: var(--daaspro-text-muted);
+  color: var(--Datalore-text-muted);
   margin: 0 0 32px;
 }
 
@@ -166,12 +166,12 @@ body,
   margin-top: 24px;
   text-align: center;
   font-size: 14px;
-  color: var(--daaspro-text-muted);
+  color: var(--Datalore-text-muted);
 }
 
 .auth-alt a,
 .auth-alt a:visited {
-  color: var(--daaspro-primary);
+  color: var(--Datalore-primary);
   text-decoration: none;
   font-weight: 500;
   cursor: pointer;
@@ -337,7 +337,7 @@ body,
 }
 
 .script-item.selected {
-  border-left-color: var(--daaspro-primary);
+  border-left-color: var(--Datalore-primary);
 }
 
 .script-item .script-item-del {
@@ -360,7 +360,7 @@ body,
   padding: 18px 20px 12px;
   font-size: 17px;
   font-weight: 600;
-  color: var(--daaspro-text-main);
+  color: var(--Datalore-text-main);
 }
 
 .ws-sider-logo-mark {

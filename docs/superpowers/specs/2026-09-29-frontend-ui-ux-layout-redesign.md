@@ -1,4 +1,4 @@
-# daaspro 前端 UI/UX 布局整改设计
+# Datalore 前端 UI/UX 布局整改设计
 
 ## 1. 背景与目标
 

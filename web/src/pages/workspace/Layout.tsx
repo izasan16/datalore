@@ -50,8 +50,8 @@ export default function WorkspaceLayout() {
 
   function onLogout() {
     logout().finally(() => {
-      localStorage.removeItem('daaspro.token');
-      localStorage.removeItem('daaspro.user');
+      localStorage.removeItem('Datalore.token');
+      localStorage.removeItem('Datalore.user');
       nav('/login');
     });
   }
@@ -120,7 +120,7 @@ export default function WorkspaceLayout() {
               flexWrap: 'wrap',
             }}
           >
-            <Avatar size={28} style={{ backgroundColor: 'var(--daaspro-primary)' }}>
+            <Avatar size={28} style={{ backgroundColor: 'var(--Datalore-primary)' }}>
               {user.username.slice(0, 1).toUpperCase()}
             </Avatar>
             <Typography.Text style={{ whiteSpace: 'nowrap' }}>

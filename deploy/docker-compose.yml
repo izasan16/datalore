@@ -1,24 +1,24 @@
 services:
   postgres:
     image: postgres:16
-    container_name: daaspro-postgres
+    container_name: Datalore-postgres
     environment:
-      POSTGRES_DB: daaspro
-      POSTGRES_USER: daaspro
+      POSTGRES_DB: Datalore
+      POSTGRES_USER: Datalore
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "15432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U daaspro"]
+      test: ["CMD-SHELL", "pg_isready -U Datalore"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7
-    container_name: daaspro-redis
+    container_name: Datalore-redis
     ports:
       - "16379:6379"
     volumes:
@@ -26,7 +26,7 @@ services:
 
   minio:
     image: minio/minio
-    container_name: daaspro-minio
+    container_name: Datalore-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -39,7 +39,7 @@ services:
 
   hive:
     image: apache/hive:3.1.3
-    container_name: daaspro-hive
+    container_name: Datalore-hive
     profiles: ["hive"]
     environment:
       SERVICE_NAME: hiveserver2
@@ -50,7 +50,7 @@ services:
 
   spark:
     image: bitnami/spark:3.5.1
-    container_name: daaspro-spark
+    container_name: Datalore-spark
     profiles: ["spark"]
     environment:
       SPARK_MODE: master
@@ -60,18 +60,18 @@ services:
 
   flink:
     image: flink:1.18
-    container_name: daaspro-flink
+    container_name: Datalore-flink
     profiles: ["flink"]
     ports:
       - "18082:8081"  # Flink Web UI / REST
 
   etl-worker:
     build: ./etl-worker
-    container_name: daaspro-etl-worker
+    container_name: Datalore-etl-worker
     environment:
-      DAASPRO_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN:-dev-worker-token}
-      DAASPRO_WORKER_PORT: 8090
-      DAASPRO_WORKER_GATEWAY_REWRITE: "1"
+      Datalore_WORKER_TOKEN: ${Datalore_ETL_WORKER_TOKEN:-dev-worker-token}
+      Datalore_WORKER_PORT: 8090
+      Datalore_WORKER_GATEWAY_REWRITE: "1"
     ports:
       - "18090:8090"
     restart: unless-stopped

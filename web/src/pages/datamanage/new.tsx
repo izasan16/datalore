@@ -146,7 +146,7 @@ export default function DataManageNewPage() {
             >
               <div style={{ textAlign: 'center', padding: result ? '28px 0' : '72px 0' }}>
                 <div style={{ marginBottom: 16 }}>
-                  <IconUpload style={{ fontSize: 40, color: 'var(--daaspro-primary)' }} />
+                  <IconUpload style={{ fontSize: 40, color: 'var(--Datalore-primary)' }} />
                 </div>
                 <Typography.Title heading={6} style={{ marginTop: 0 }}>
                   点击或拖拽文件到此处上传

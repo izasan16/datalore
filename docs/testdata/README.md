@@ -12,8 +12,8 @@
 | 端口 | 15432 |
 | 数据库 | business_demo |
 | Schema | sales（源数据）/ ods（ETL 目标，初始为空） |
-| 用户名 | daaspro |
-| 密码 | 与平台库相同（daaspro_dev_2026） |
+| 用户名 | Datalore |
+| 密码 | 与平台库相同（Datalore_dev_2026） |
 
 表清单：`sales.customers`（30 行）、`sales.products`（20 行）、`sales.orders`（200 行）、`sales.order_items`（400 行）、`sales.sales_daily`（2000 行）。
 
@@ -33,8 +33,8 @@
 首次初始化或想恢复初始数据时，在仓库根目录执行：
 
 ```powershell
-docker exec daaspro-postgres createdb -U daaspro business_demo
-Get-Content docs/testdata/init-demo-db.sql -Raw -Encoding UTF8 | docker exec -i daaspro-postgres psql -U daaspro -d business_demo
+docker exec Datalore-postgres createdb -U Datalore business_demo
+Get-Content docs/testdata/init-demo-db.sql -Raw -Encoding UTF8 | docker exec -i Datalore-postgres psql -U Datalore -d business_demo
 ```
 
 库已存在时省略第一行（脚本会重置 sales/ods 两个 schema）。

@@ -1,0 +1,52 @@
+package com.datalore.datasource.service;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import com.datalore.common.exception.BizException;
+import com.datalore.datasource.entity.DataSourceEntity;
+import org.springframework.stereotype.Component;
+
+import javax.sql.DataSource;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** 按数据源 id 缓存的 Hikari 连接池，一律使用数据源注册信息。 */
+@Component
+public class ConnectionManager {
+
+    private final Map<Long, HikariDataSource> pools = new ConcurrentHashMap<>();
+
+    public DataSource pool(DataSourceEntity ds, String password) {
+        return pools.computeIfAbsent(ds.getId(), id -> {
+            try {
+                JdbcUrls t = JdbcUrls.of(ds.getType());
+                HikariConfig cfg = new HikariConfig();
+                cfg.setJdbcUrl(t.url(ds.getHost(), ds.getPort(), ds.getDatabaseName(), ds.getSchemaName()));
+                cfg.setUsername(ds.getUsername());
+                cfg.setPassword(password);
+                cfg.setMaximumPoolSize(5);
+                cfg.setMinimumIdle(0);
+                cfg.setConnectionTimeout(5_000);
+                cfg.setIdleTimeout(60_000);
+                cfg.setPoolName("ds-" + id);
+                return new HikariDataSource(cfg);
+            } catch (RuntimeException e) {
+                // 池初始化失败（连不上/认证失败等）给出可理解的原因；SQL 执行错误仍由网关透传原生消息
+                Throwable root = e;
+                while (root.getCause() != null) root = root.getCause();
+                String msg;
+                if (root instanceof java.net.UnknownHostException uhe) {
+                    msg = "无法解析数据源主机 " + uhe.getMessage() + "，请检查主机名是否正确";
+                } else {
+                    msg = "数据源连接失败: " + (root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage());
+                }
+                throw new BizException(400, msg);
+            }
+        });
+    }
+
+    public void closePool(Long datasourceId) {
+        var ds = pools.remove(datasourceId);
+        if (ds != null) ds.close();
+    }
+}

@@ -13,8 +13,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const r = await login(v.username, v.password);
-      localStorage.setItem('daaspro.token', r.token);
-      localStorage.setItem('daaspro.user', JSON.stringify(r.user));
+      localStorage.setItem('Datalore.token', r.token);
+      localStorage.setItem('Datalore.user', JSON.stringify(r.user));
       Message.success('登录成功');
       nav('/workspace');
     } catch (e: any) {

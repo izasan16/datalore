@@ -23,8 +23,8 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 /** 品牌名 */
 export function BrandName({ light = false }: { light?: boolean }) {
   return (
-    <span style={{ color: light ? '#fff' : 'var(--daaspro-text-main)', letterSpacing: 0.3 }}>
-      daaspro
+    <span style={{ color: light ? '#fff' : 'var(--Datalore-text-main)', letterSpacing: 0.3 }}>
+      Datalore
     </span>
   );
 }
