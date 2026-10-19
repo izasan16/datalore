@@ -50,7 +50,7 @@ class TableDeleteServiceTest {
         Long tid = reg.tenantId();
         TenantContext.set(new TenantContext.Ctx(tid, 1L, "admin", "admin"));
         var ds = dataSourceService.create("删表PG", "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         dsId = ds.getId();
         table = "t_delref_" + System.nanoTime();
         execDdl("CREATE TABLE " + table + " (id bigserial PRIMARY KEY, name text)");

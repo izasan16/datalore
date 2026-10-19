@@ -45,7 +45,7 @@ public class DataSourceService {
     }
 
     public DataSourceEntity create(String name, String type, String host, Integer port,
-                                   String databaseName, String schemaName, String username, String password) {
+                                   String databaseName, String schemaName, String username, String password, Map<String, String> extraConfig) {
         if (!SUPPORTED.contains(type)) {
             throw new BizException(400, "不支持的数据源类型");
         }
@@ -64,6 +64,7 @@ public class DataSourceService {
         ds.setSchemaName(schemaName);
         ds.setUsername(username);
         ds.setPasswordEnc(password != null && !password.isBlank() ? cipher.encrypt(password) : null);
+        ds.setExtraConfig(serializeExtra(extraConfig));
         ds.setStatus(1);
         mapper.insert(ds);
         return ds;
@@ -71,7 +72,7 @@ public class DataSourceService {
 
     /** 编辑数据源；密码留空表示保持原密码。更新后关闭旧连接池，下次访问按新配置重建。 */
     public DataSourceEntity update(Long id, String name, String host, Integer port,
-                                   String databaseName, String schemaName, String username, String password) {
+                                   String databaseName, String schemaName, String username, String password, Map<String, String> extraConfig) {
         DataSourceEntity ds = getOwned(id);
         if (name != null && !name.isBlank() && !name.equals(ds.getName())) {
             Long dup = mapper.selectCount(new LambdaQueryWrapper<DataSourceEntity>()
@@ -86,6 +87,7 @@ public class DataSourceService {
         ds.setSchemaName(schemaName == null || schemaName.isBlank() ? null : schemaName.trim());
         if (username != null && !username.isBlank()) ds.setUsername(username.trim());
         if (password != null && !password.isBlank()) ds.setPasswordEnc(cipher.encrypt(password));
+        ds.setExtraConfig(serializeExtra(extraConfig));
         mapper.updateById(ds);
         connectionManager.closePool(id);
         return ds;
@@ -100,12 +102,12 @@ public class DataSourceService {
     public void test(Long id) {
         DataSourceEntity ds = getOwned(id);
         testConnection(ds.getType(), ds.getHost(), ds.getPort(), ds.getDatabaseName(),
-                ds.getSchemaName(), ds.getUsername(), cipher.decrypt(ds.getPasswordEnc()));
+                ds.getSchemaName(), ds.getUsername(), cipher.decrypt(ds.getPasswordEnc()), parseExtra(ds.getExtraConfig()));
     }
 
     public void testConnection(String type, String host, Integer port, String db, String schema,
-                               String username, String password) {
-        if ("spark".equals(type) || "flink".equals(type)) { testComputeEngine(type, host, port); return; }
+                               String username, String password, Map<String, String> extraConfig) {
+        if ("spark".equals(type) || "flink".equals(type)) { testComputeEngine(type, host, port, extraConfig); return; }
         String url = JdbcUrls.of(type).url(host, port, db, schema);
         try (var conn = DriverManager.getConnection(url, username, password)) {
             if (!conn.isValid(5)) throw new BizException(400, "连接校验失败");
@@ -280,7 +282,7 @@ public class DataSourceService {
         };
     }
 
-    private void testComputeEngine(String type, String host, Integer port) {
+    private void testComputeEngine(String type, String host, Integer port, Map<String, String> extraConfig) {
         String base = "http://" + host + ":" + (port != null ? port : defaultPortFor(type));
         String path = "spark".equals(type) ? "/batches" : "/overview";
         try {
@@ -290,11 +292,38 @@ public class DataSourceService {
             if (resp.statusCode() >= 400) throw new BizException(400, "计算引擎连接失败 (HTTP " + resp.statusCode() + ")");
         } catch (BizException e) { throw e; }
         catch (Exception e) { throw new BizException(400, "计算引擎连接失败: " + rootMessage(e)); }
+        if (extraConfig != null && extraConfig.get("webhdfsUrl") != null && !extraConfig.get("webhdfsUrl").isBlank()) {
+            try {
+                var hdfsUrl = extraConfig.get("webhdfsUrl").replaceAll("/$", "") + "/webhdfs/v1/?op=GETFILESTATUS";
+                var hdfsReq = java.net.http.HttpRequest.newBuilder().uri(java.net.URI.create(hdfsUrl)).GET().build();
+                var hdfsResp = java.net.http.HttpClient.newHttpClient().send(hdfsReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (hdfsResp.statusCode() >= 400) System.out.println("WARN: WebHDFS probe returned " + hdfsResp.statusCode());
+            } catch (Exception hdfsEx) {
+                System.out.println("WARN: WebHDFS probe failed: " + hdfsEx.getMessage());
+            }
+        }
     }
 
     public static String rootMessage(Exception e) {
         Throwable t = e;
         while (t.getCause() != null) t = t.getCause();
         return t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+    }
+    static String serializeExtra(Map<String, String> extraConfig) {
+        if (extraConfig == null || extraConfig.isEmpty()) return null;
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(extraConfig);
+        } catch (Exception e) {
+            throw new BizException(400, "extraConfig 序列化失败");
+        }
+    }
+    static Map<String, String> parseExtra(String extraConfigJson) {
+        if (extraConfigJson == null || extraConfigJson.isBlank()) return Map.of();
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(extraConfigJson,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            return Map.of();
+        }
     }
 }

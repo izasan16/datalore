@@ -31,37 +31,45 @@ public class DataSourceController {
 
     public record CreateReq(@NotBlank String name, @NotBlank String type, @NotBlank String host,
                             Integer port, String databaseName, String schemaName,
-                            String username, String password) {}
+                            String username, String password, Map<String, String> extraConfig) {}
 
     public record UpdateReq(String name, String host, Integer port, String databaseName,
-                            String schemaName, String username, String password) {}
+                            String schemaName, String username, String password, Map<String, String> extraConfig) {}
 
     public record TestReq(@NotBlank String type, @NotBlank String host, Integer port,
                           String databaseName, String schemaName,
-                          String username, String password) {}
+                          String username, String password, Map<String, String> extraConfig) {}
 
     @GetMapping
     public List<Map<String, Object>> list() {
-        return service.list().stream().map(ds -> Map.<String, Object>of(
-                "id", ds.getId(), "name", ds.getName(), "type", ds.getType(),
-                "host", ds.getHost() == null ? "" : ds.getHost(),
-                "port", ds.getPort() == null ? 0 : ds.getPort(),
-                "databaseName", ds.getDatabaseName() == null ? "" : ds.getDatabaseName(),
-                "schemaName", ds.getSchemaName() == null ? "" : ds.getSchemaName(),
-                "status", ds.getStatus())).toList();
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (var ds : service.list()) {
+            var m = new java.util.HashMap<String, Object>();
+            m.put("id", ds.getId());
+            m.put("name", ds.getName());
+            m.put("type", ds.getType());
+            m.put("host", ds.getHost() == null ? "" : ds.getHost());
+            m.put("port", ds.getPort() == null ? 0 : ds.getPort());
+            m.put("databaseName", ds.getDatabaseName() == null ? "" : ds.getDatabaseName());
+            m.put("schemaName", ds.getSchemaName() == null ? "" : ds.getSchemaName());
+            m.put("status", ds.getStatus());
+            m.put("extraConfig", ds.getExtraConfig());
+            result.add(m);
+        }
+        return result;
     }
 
     @PostMapping
     public Map<String, Object> create(@RequestBody CreateReq req) {
         var ds = service.create(req.name(), req.type(), req.host(), req.port(),
-                req.databaseName(), req.schemaName(), req.username(), req.password());
+                req.databaseName(), req.schemaName(), req.username(), req.password(), req.extraConfig());
         return Map.of("id", ds.getId());
     }
 
     @PutMapping("/{id}")
     public Map<String, Object> update(@PathVariable Long id, @RequestBody UpdateReq req) {
         var ds = service.update(id, req.name(), req.host(), req.port(),
-                req.databaseName(), req.schemaName(), req.username(), req.password());
+                req.databaseName(), req.schemaName(), req.username(), req.password(), req.extraConfig());
         return Map.of("id", ds.getId());
     }
 
@@ -74,7 +82,7 @@ public class DataSourceController {
     @PostMapping("/test")
     public Map<String, Object> testRaw(@RequestBody TestReq req) {
         service.testConnection(req.type(), req.host(), req.port(), req.databaseName(),
-                req.schemaName(), req.username(), req.password());
+                req.schemaName(), req.username(), req.password(), req.extraConfig());
         return Map.of("ok", true);
     }
 

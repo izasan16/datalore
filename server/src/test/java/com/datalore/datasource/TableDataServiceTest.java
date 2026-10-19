@@ -36,7 +36,7 @@ class TableDataServiceTest {
         Long tid = tenantService.getTenantIdBySlug(slug);
         TenantContext.set(new TenantContext.Ctx(tid, 1L, "admin", "admin"));
         var ds = dataSourceService.create("表服务PG", "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         dsId = ds.getId();
         table = "t_tabsvc_" + System.nanoTime();
         execDdl("CREATE TABLE " + table + " (id bigserial PRIMARY KEY, name text, city text, qty int)");

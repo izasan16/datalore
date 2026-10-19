@@ -38,7 +38,7 @@ class ApiPubFlowTest {
                 tenantService.registerAutoSlug("API租户" + slug, "adm" + slug, "password123"));
         TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin"));
         var source = dataSourceService.create("API-PG-" + slug, "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         String table = "t_open_" + slug;
         gateway.run(String.valueOf(source.getId()), "CREATE TABLE " + table + "(id bigint, name text, city text)");
         gateway.run(String.valueOf(source.getId()),

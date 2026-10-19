@@ -32,7 +32,7 @@ class ImportedTableImportTest {
                 tenantService.registerAutoSlug("导入租户" + slug, "adm" + slug, "password123"));
         TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin"));
         var ds = dataSourceService.create("导入PG" + slug, "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         return new Ctx(tid, ds.getId(), slug);
     }
 

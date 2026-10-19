@@ -26,7 +26,7 @@ class SqlGatewayLimitsTest {
                 tenantService.registerAutoSlug("限额租户" + slug, "adm" + slug, "password123"));
         TenantContext.set(new TenantContext.Ctx(tid, 1L, "adm", "admin"));
         var ds = dataSourceService.create("限额PG" + slug, "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         return String.valueOf(ds.getId());
     }
 

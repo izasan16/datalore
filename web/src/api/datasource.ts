@@ -9,6 +9,7 @@ export interface DataSourceInfo {
   databaseName: string;
   schemaName: string;
   status: number;
+  extraConfig?: string | null;
 }
 
 export interface ColumnInfo {
@@ -28,7 +29,8 @@ export function listDatasources() {
 
 export function createDatasource(payload: {
   name: string; type: string; host: string; port?: number;
-  databaseName: string; schemaName?: string; username: string; password: string;
+  databaseName?: string; schemaName?: string; username?: string; password?: string;
+  extraConfig?: Record<string, string>;
 }) {
   return http.post('/datasources', payload).then((r) => r.data);
 }
@@ -36,6 +38,7 @@ export function createDatasource(payload: {
 export function updateDatasource(id: number, payload: {
   name?: string; host?: string; port?: number;
   databaseName?: string; schemaName?: string; username?: string; password?: string;
+  extraConfig?: Record<string, string>;
 }) {
   return http.put(`/datasources/${id}`, payload).then((r) => r.data);
 }

@@ -30,7 +30,7 @@ class DataSourceCrudTest {
     void createListDelete() {
         newTenant("dslist");
         var ds = service.create("本地PG", "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         assertThat(ds.getId()).isNotNull();
         assertThat(service.list()).anyMatch(d -> d.getId().equals(ds.getId()));
 
@@ -42,7 +42,7 @@ class DataSourceCrudTest {
     void testConnectivityToPlatformPg() {
         newTenant("dsok");
         var ds = service.create("连通测试", "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         service.test(ds.getId());
     }
 
@@ -50,7 +50,7 @@ class DataSourceCrudTest {
     void wrongPasswordFails() {
         newTenant("dsbad");
         var ds = service.create("错误密码", "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "wrong-password");
+                "datalore", "public", "datalore", "wrong-password", null);
         assertThatThrownBy(() -> service.test(ds.getId()))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("连接失败");
@@ -59,7 +59,7 @@ class DataSourceCrudTest {
     @Test
     void rejectsUnknownType() {
         newTenant("dstype");
-        assertThatThrownBy(() -> service.create("x", "sqlite", "h", 1, "d", null, "u", "p"))
+        assertThatThrownBy(() -> service.create("x", "sqlite", "h", 1, "d", null, "u", "p", null))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("不支持");
     }
@@ -70,7 +70,7 @@ class DataSourceCrudTest {
         long b = newTenant("dsisob");
         TenantContext.set(new TenantContext.Ctx(a, 1L, "admin", "admin"));
         var ds = service.create("隔离", "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         TenantContext.set(new TenantContext.Ctx(b, 2L, "admin", "admin"));
         assertThatThrownBy(() -> service.getOwned(ds.getId()))
                 .isInstanceOf(BizException.class)

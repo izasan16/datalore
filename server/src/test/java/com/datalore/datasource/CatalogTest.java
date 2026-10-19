@@ -26,7 +26,7 @@ class CatalogTest {
         assertThat(dataSourceService.list()).isEmpty();
 
         var ds = dataSourceService.create("目录PG" + slug, "postgresql", "localhost", 15432,
-                "datalore", "public", "datalore", "datalore_dev_2026");
+                "datalore", "public", "datalore", "datalore_dev_2026", null);
         assertThat(dataSourceService.listSchemas(ds.getId())).isNotEmpty();
         assertThat(dataSourceService.listTables(ds.getId(), null)).isNotNull();
 
