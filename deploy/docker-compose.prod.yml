@@ -1,0 +1,83 @@
+# 数据开发平台 - 测试服务器部署
+# 使用: docker compose -f docker-compose.prod.yml up -d
+# 前提: 服务器已安装 Docker + Docker Compose
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: daaspro-postgres
+    environment:
+      POSTGRES_DB: daaspro
+      POSTGRES_USER: daaspro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daaspro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: daaspro-redis
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    container_name: daaspro-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-daaspro}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env 中设置 MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    restart: unless-stopped
+
+  etl-worker:
+    build: ./etl-worker
+    container_name: daaspro-etl-worker
+    environment:
+      DAASPRO_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN:?请在 .env 中设置 DAASPRO_ETL_WORKER_TOKEN}
+      DAASPRO_WORKER_PORT: "8090"
+      DAASPRO_WORKER_GATEWAY_REWRITE: "0"
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ../server
+    container_name: daaspro-server
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/daaspro
+      SPRING_DATASOURCE_USERNAME: daaspro
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      DAASPRO_MINIO_ENDPOINT: http://minio:9000
+      DAASPRO_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-daaspro}
+      DAASPRO_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      DAASPRO_ETL_WORKER_URL: http://etl-worker:8090
+      DAASPRO_ETL_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN}
+      DAASPRO_CRYPTO_KEY: ${DAASPRO_CRYPTO_KEY:?请在 .env 中设置 DAASPRO_CRYPTO_KEY（32字节base64）}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../web
+    container_name: daaspro-web
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
