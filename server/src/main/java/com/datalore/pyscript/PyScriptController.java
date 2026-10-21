@@ -23,6 +23,7 @@ public class PyScriptController {
     public record CreateReq(@NotBlank String name, Long datasourceId, String content) {}
     public record UpdateReq(String name, Long datasourceId, String content) {}
     public record RunReq(java.util.Map<String, String> params) {}
+    public record AdhocReq(Long datasourceId, String content, java.util.Map<String, String> params) {}
 
     @GetMapping
     public List<PyScriptService.ScriptInfo> list() {
@@ -53,6 +54,11 @@ public class PyScriptController {
     @PostMapping("/{id}/run")
     public PyScriptService.RunResult run(@PathVariable Long id, @RequestBody(required = false) RunReq req) {
         return service.run(id, req != null ? new PyScriptService.RunReq(req.params()) : new PyScriptService.RunReq(null));
+    }
+
+    @PostMapping("/run-adhoc")
+    public PyScriptService.RunResult runAdhoc(@RequestBody AdhocReq req) {
+        return service.runAdhoc(new PyScriptService.AdhocReq(req.datasourceId(), req.content(), req.params()));
     }
 
     @GetMapping("/runs/{runId}/refresh")

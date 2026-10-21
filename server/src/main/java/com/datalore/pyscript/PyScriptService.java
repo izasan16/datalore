@@ -153,6 +153,35 @@ public class PyScriptService {
 
     public record RunStatus(long runId, String status, String error, String startedAt, String finishedAt) {}
 
+    public record AdhocReq(Long datasourceId, String content, Map<String, String> params) {}
+
+    /** 临时运行：不绑定脚本（对齐 SQL 分析的直接执行），运行记录保留但 script_id 为空 */
+    public RunResult runAdhoc(AdhocReq req) {
+        if (req.datasourceId() == null) throw new BizException(400, "请选择数据源");
+        if (req.content() == null || req.content().isBlank()) throw new BizException(400, "请输入脚本内容");
+        DataSourceEntity ds = requireOwnedDatasource(req.datasourceId());
+        String code = req.content();
+        List<String> declared = extractParams(code);
+        for (String p : declared) {
+            String val = req.params() != null ? req.params().get(p) : null;
+            if (val == null) val = "";
+            code = code.replace(" + p + ", val);
+        }
+        PyscriptRunEntity run = new PyscriptRunEntity();
+        run.setDatasourceId(req.datasourceId());
+        run.setStatus("QUEUED");
+        run.setLogText("");
+        run.setCreatedAt(LocalDateTime.now());
+        runMapper.insert(run);
+
+        String remoteJobId = executor.submit(ds, code, run.getId());
+        run.setRemoteJobId(remoteJobId);
+        run.setStatus("RUNNING");
+        run.setStartedAt(LocalDateTime.now());
+        runMapper.updateById(run);
+        return new RunResult(run.getId(), run.getStatus());
+    }
+
     public RunStatus refresh(Long runId) {
         PyscriptRunEntity run = getRun(runId);
         if ("RUNNING".equals(run.getStatus()) || "QUEUED".equals(run.getStatus())) {
@@ -188,9 +217,17 @@ public class PyScriptService {
     private PyscriptRunEntity getRun(Long runId) {
         PyscriptRunEntity run = runMapper.selectById(runId);
         if (run == null) throw new BizException(404, "运行记录不存在");
-        PyscriptEntity s = scriptMapper.selectById(run.getScriptId());
-        if (s == null || !s.getTenantId().equals(TenantContext.requireTenantId())) {
-            throw new BizException(404, "运行记录不存在");
+        if (run.getScriptId() != null) {
+            PyscriptEntity s = scriptMapper.selectById(run.getScriptId());
+            if (s == null || !s.getTenantId().equals(TenantContext.requireTenantId())) {
+                throw new BizException(404, "运行记录不存在");
+            }
+        } else {
+            // 临时运行：通过数据源校验租户归属
+            DataSourceEntity ds = dsMapper.selectById(run.getDatasourceId());
+            if (ds == null || !ds.getTenantId().equals(TenantContext.requireTenantId())) {
+                throw new BizException(404, "运行记录不存在");
+            }
         }
         return run;
     }

@@ -10,7 +10,7 @@ import {
 import {
   ScriptInfo, ScriptDetail, RunStatus, RunHistoryItem, HdfsEntry,
   listScripts, getScript, createScript, updateScript, deleteScript,
-  runScript, refreshRun, getRunLogs, runHistory, listHdfs,
+  runScript, runAdhoc, refreshRun, getRunLogs, runHistory, listHdfs,
 } from '../../api/pyscript';
 import { DataSourceInfo, listDatasources } from '../../api/datasource';
 
@@ -67,6 +67,9 @@ export default function PyScriptPage() {
   const [saving, setSaving] = useState(false);
   const [paramModal, setParamModal] = useState(false);
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
+  const [adhocRun, setAdhocRun] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
   const [hdfsTree, setHdfsTree] = useState<any[]>([]);
   const [hdfsLoading, setHdfsLoading] = useState(false);
   const [renameId, setRenameId] = useState<number | null>(null);
@@ -161,9 +164,34 @@ export default function PyScriptPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
+  const clientParams = useCallback((code: string) => {
+    const out: string[] = [];
+    const re = /\\\$\{(\\\w+)\}/g;
+    let m;
+    while ((m = re.exec(code)) !== null) out.push(m[1]);
+    return out;
+  }, []);
+
   const handleRun = useCallback(async () => {
-    if (currentId == null || !currentDs) return;
+    if (!content.trim()) { Message.warning('请输入脚本内容'); return; }
+    if (!currentDs) { Message.warning('请先选择 Spark / Flink 数据源'); return; }
+    if (currentId == null) {
+      // 临时运行（对齐 SQL 分析）：不保存脚本直接执行
+      const ps = clientParams(content);
+      if (ps.length > 0) {
+        setAdhocRun(true);
+        setParamValues(Object.fromEntries(ps.map((p) => [p, ''])));
+        setParamModal(true);
+        return;
+      }
+      try {
+        const r = await runAdhoc(currentDs.id, content);
+        startPolling(r.runId);
+      } catch (e: any) { Message.error(e?.response?.data?.message ?? '运行失败'); }
+      return;
+    }
     if (detail && detail.params.length > 0) {
+      setAdhocRun(false);
       setParamValues(Object.fromEntries(detail.params.map((p) => [p, ''])));
       setParamModal(true);
       return;
@@ -172,27 +200,54 @@ export default function PyScriptPage() {
       const r = await runScript(currentId, {});
       startPolling(r.runId);
     } catch (e: any) { Message.error(e?.response?.data?.message ?? '运行失败'); }
-  }, [currentId, currentDs, detail, startPolling]);
+  }, [currentId, currentDs, detail, content, clientParams, startPolling]);
 
   const handleRunWithParams = useCallback(async () => {
-    if (currentId == null) return;
     setParamModal(false);
     try {
-      const r = await runScript(currentId, paramValues);
-      startPolling(r.runId);
+      if (adhocRun) {
+        if (!currentDs) return;
+        const r = await runAdhoc(currentDs.id, content, paramValues);
+        startPolling(r.runId);
+      } else {
+        if (currentId == null) return;
+        const r = await runScript(currentId, paramValues);
+        startPolling(r.runId);
+      }
     } catch (e: any) { Message.error(e?.response?.data?.message ?? '运行失败'); }
-  }, [currentId, paramValues, startPolling]);
+  }, [adhocRun, currentId, currentDs, content, paramValues, startPolling]);
 
   const handleSave = useCallback(async () => {
-    if (currentId == null) return;
+    if (currentId == null) {
+      // 新脚本：保存时命名（数据库客户端习惯）
+      if (!currentDs) { Message.warning('请先选择 Spark / Flink 数据源'); return; }
+      if (!content.trim()) { Message.warning('请输入脚本内容'); return; }
+      setSaveName('');
+      setSaveOpen(true);
+      return;
+    }
     setSaving(true);
     try {
       await updateScript(currentId, { content, datasourceId: selectedDs });
       Message.success('保存成功');
-      if (currentId != null) getScript(currentId).then(setDetail).catch(() => {});
+      getScript(currentId).then(setDetail).catch(() => {});
     } catch (e: any) { Message.error(e?.response?.data?.message ?? '保存失败'); }
     finally { setSaving(false); }
-  }, [currentId, content, selectedDs]);
+  }, [currentId, content, selectedDs, currentDs]);
+
+  const handleSaveAsNew = useCallback(async () => {
+    if (!saveName.trim() || !currentDs) { Message.warning('请填写名称'); return; }
+    setSaveOpen(false);
+    setSaving(true);
+    try {
+      const d = await createScript({ name: saveName.trim(), datasourceId: currentDs.id, content });
+      setSaveName('');
+      await loadScripts();
+      setCurrentId(d.id);
+      Message.success('已保存');
+    } catch (e: any) { Message.error(e?.response?.data?.message ?? '保存失败'); }
+    finally { setSaving(false); }
+  }, [saveName, currentDs, content, loadScripts]);
 
   const handleNew = useCallback(async () => {
     if (!newName.trim() || !newDs) { Message.warning('请填写名称并选择数据源'); return; }
@@ -258,7 +313,7 @@ export default function PyScriptPage() {
       {/* Left: script list + HDFS tree */}
       <div style={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
         <Card title="脚本" className="card-fill" style={{ flexShrink: 0, maxHeight: 300 }} bodyStyle={{ padding: '4px 0', overflowY: 'auto' }} extra={<Button size="mini" type="primary" icon={<IconPlus />} onClick={() => setNewDialog(true)}>新建</Button>}>
-          {scripts.length === 0 && <Text type="secondary" style={{ display: 'block', padding: '8px 16px' }}>还没有脚本，点「新建」开始</Text>}
+          {scripts.length === 0 && <Text type="secondary" style={{ display: 'block', padding: '8px 16px' }}>还没有脚本，可直接编写并运行，保存后加入列表</Text>}
             {scripts.map((s) => {
               const selected = s.id === currentId;
               return (
@@ -338,10 +393,10 @@ export default function PyScriptPage() {
               options={computeDs.map((d) => ({ value: d.id, label: `${d.name}（${d.type === 'spark' ? 'Spark' : 'Flink'}）` }))}
               disabled={currentId != null && detail != null}
             />
-            <Button type="primary" icon={<IconPlayArrow />} loading={running} disabled={currentId == null || !selectedDs} onClick={handleRun}>
+            <Button type="primary" icon={<IconPlayArrow />} loading={running} disabled={!currentDs} onClick={handleRun}>
               运行
             </Button>
-            <Button icon={<IconSave />} loading={saving} disabled={currentId == null} onClick={handleSave}>
+            <Button icon={<IconSave />} loading={saving} onClick={handleSave}>
               保存
             </Button>
           </Space>
@@ -408,11 +463,17 @@ export default function PyScriptPage() {
         </Space>
       </Modal>
 
+      {/* Save new script modal（未选中脚本时保存即命名） */}
+      <Modal title="保存脚本" visible={saveOpen} onCancel={() => setSaveOpen(false)}
+        onOk={handleSaveAsNew} okText="保存" cancelText="取消">
+        <Input placeholder="脚本名称" value={saveName} onChange={setSaveName} />
+      </Modal>
+
       {/* Parameter modal */}
       <Modal title="运行参数" visible={paramModal} onCancel={() => setParamModal(false)}
         onOk={handleRunWithParams} okText="运行" cancelText="取消">
         <Space direction="vertical" style={{ width: '100%' }}>
-          {detail?.params.map((p) => (
+          {(adhocRun ? clientParams(content) : (detail?.params ?? [])).map((p) => (
             <Input key={p} addBefore={p} placeholder="值" value={paramValues[p] ?? ''}
               onChange={(v) => setParamValues((prev) => ({ ...prev, [p]: v }))} />
           ))}

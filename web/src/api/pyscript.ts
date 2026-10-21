@@ -64,6 +64,10 @@ export function runScript(id: number, params?: Record<string, string>) {
   return http.post<RunResult>(`/pyscript/${id}/run`, { params: params ?? {} }).then(r => r.data);
 }
 
+export function runAdhoc(datasourceId: number, content: string, params?: Record<string, string>) {
+  return http.post<RunResult>('/pyscript/run-adhoc', { datasourceId, content, params: params ?? {} }).then(r => r.data);
+}
+
 export function refreshRun(runId: number) {
   return http.get<RunStatus>(`/pyscript/runs/${runId}/refresh`).then(r => r.data);
 }
