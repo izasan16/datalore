@@ -287,9 +287,22 @@ public class DataSourceService {
         String path = "spark".equals(type) ? "/batches" : "/overview";
         try {
             var client = java.net.http.HttpClient.newHttpClient();
-            var req = java.net.http.HttpRequest.newBuilder().uri(java.net.URI.create(base + path)).GET().build();
-            var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() >= 400) throw new BizException(400, "计算引擎连接失败 (HTTP " + resp.statusCode() + ")");
+            Exception last = null;
+            for (int attempt = 0; attempt < 2; attempt++) {
+                try {
+                    var req = java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create(base + path))
+
+                            .GET().build();
+                    var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+                    if (resp.statusCode() >= 400) throw new BizException(400, "计算引擎连接失败 (HTTP " + resp.statusCode() + ")");
+                    last = null;
+                    break;
+                } catch (java.io.IOException ioEx) {
+                    last = ioEx; // 瞬态连接错误（如空闲 keep-alive 被服务端关闭）重试一次
+                }
+            }
+            if (last != null) throw last;
         } catch (BizException e) { throw e; }
         catch (Exception e) { throw new BizException(400, "计算引擎连接失败: " + rootMessage(e)); }
         if (extraConfig != null && extraConfig.get("webhdfsUrl") != null && !extraConfig.get("webhdfsUrl").isBlank()) {

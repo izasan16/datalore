@@ -87,7 +87,7 @@ export default function DatasourceCreatePage() {
     const fields: string[] = ['type', 'host'];
     if (!isComputeType(t)) fields.push('databaseName', 'username', 'password');
     let v: any;
-    try { v = await form.validate(fields); } catch { return; }
+    try { await form.validate(fields); v = form.getFieldsValue(); } catch { return; }
     setTesting(true);
     try {
       await http.post('/datasources/test', {
