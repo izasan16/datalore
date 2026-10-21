@@ -27,15 +27,16 @@ result.show()
 # df.show()
 `;
 
-const FLINK_TEMPLATE = `# env 和 st_env 变量已由平台注入
-# 批处理示例：
-# ds = env.from_elements(1, 2, 3, 4, 5)
-# ds.map(lambda x: x * 2).print()
+const FLINK_TEMPLATE = `from pyflink.datastream import StreamExecutionEnvironment
 
-# 表 API 示例：
-# st_env.execute_sql("SELECT 1").print()
+env = StreamExecutionEnvironment.get_execution_environment()
+env.set_parallelism(1)
 
-print("Hello from PyFlink!")
+ds = env.from_collection([1, 2, 3, 4, 5])
+ds.map(lambda x: x * 10).print()
+
+print("PYFLINK_OK")
+env.execute("datalore_test")
 `;
 
 const { Text } = Typography;
@@ -131,6 +132,14 @@ export default function PyScriptPage() {
         }
         if (status.status === 'SUCCESS' || status.status === 'FAILED') {
           if (pollRef.current) clearInterval(pollRef.current);
+          // 终态时再拉一次日志，防止并发查询拿到空结果
+          try {
+            const finalLogs = await getRunLogs(runId, logOffsetRef.current);
+            if (finalLogs.logs) {
+              logOffsetRef.current = finalLogs.offset;
+              setRunLogs((prev) => prev + finalLogs.logs);
+            }
+          } catch { /* ignore */ }
           setRunning(false);
           if (currentId != null) runHistory(currentId).then(setHistory).catch(() => {});
         }

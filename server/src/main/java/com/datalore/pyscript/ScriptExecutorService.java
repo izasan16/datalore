@@ -68,7 +68,7 @@ public class ScriptExecutorService {
             HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() >= 300) throw new BizException(400, "Spark 提交失败: " + resp.body());
             JsonNode node = objectMapper.readTree(resp.body());
-            return String.valueOf(node.path("id").asLong());
+            return node.path("id").asText();
         } catch (BizException e) { throw e; }
         catch (Exception e) { throw new BizException(400, "Spark 提交失败: " + e.getMessage()); }
     }
@@ -136,30 +136,84 @@ public class ScriptExecutorService {
 
     // === Flink REST ===
     private String submitFlink(DataSourceEntity ds, String code, long localRunId) {
-        String baseUrl = flinkUrl(ds);
+        String baseUrl = flinkScriptUrl(ds);
         try {
-            // PyFlink submission via REST is not natively supported for .py files.
-            // We use a lightweight approach: POST /jars/:id/run with programArgs
-            // For now, we'll use Flink REST API /jars/upload + run pattern.
-            // But without a pre-uploaded jar containing PyFlink runner, we can't submit.
-            // This is a known limitation - for now return error with helpful message.
-            // TODO: implement wrapper jar approach in next iteration
-            throw new BizException(400, "Flink 脚本提交暂未实现，需要部署 wrapper jar。当前版本仅支持 Spark (Livy)。");
+            String body = objectMapper.writeValueAsString(Map.of("code", code));
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/submit"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 300) throw new BizException(400, "Flink 提交失败: " + resp.body());
+            JsonNode node = objectMapper.readTree(resp.body());
+            return node.path("jobId").asText();
         } catch (BizException e) { throw e; }
         catch (Exception e) { throw new BizException(400, "Flink 提交失败: " + e.getMessage()); }
     }
 
     private void refreshFlink(PyscriptRunEntity run, DataSourceEntity ds) {
-        // Same as submitFlink - not implemented yet
-        run.setStatus("FAILED");
-        run.setError("Flink 状态刷新暂未实现");
-        run.setFinishedAt(LocalDateTime.now());
+        String baseUrl = flinkScriptUrl(ds);
+        String jobId = run.getRemoteJobId();
+        if (jobId == null || jobId.isBlank()) {
+            run.setStatus("FAILED");
+            run.setError("缺少远端作业 ID");
+            run.setFinishedAt(LocalDateTime.now());
+            return;
+        }
+        try {
+            HttpRequest statusReq = HttpRequest.newBuilder().uri(URI.create(baseUrl + "/status/" + jobId)).GET().build();
+            HttpResponse<String> statusResp = httpClient.send(statusReq, HttpResponse.BodyHandlers.ofString());
+            if (statusResp.statusCode() >= 300) {
+                run.setStatus("FAILED");
+                run.setError("Flink 状态查询失败 (HTTP " + statusResp.statusCode() + ")");
+                run.setFinishedAt(LocalDateTime.now());
+                return;
+            }
+            JsonNode stateNode = objectMapper.readTree(statusResp.body());
+            String state = stateNode.path("state").asText();
+            switch (state) {
+                case "FINISHED" -> {
+                    run.setStatus("SUCCESS");
+                    run.setFinishedAt(LocalDateTime.now());
+                }
+                case "FAILED", "CANCELED", "error" -> {
+                    run.setStatus("FAILED");
+                    run.setError("Flink 作业状态: " + state);
+                    run.setFinishedAt(LocalDateTime.now());
+                }
+                default -> run.setStatus("RUNNING");
+            }
+            // Append logs
+            HttpRequest logReq = HttpRequest.newBuilder().uri(URI.create(baseUrl + "/logs/" + jobId)).GET().build();
+            HttpResponse<String> logResp = httpClient.send(logReq, HttpResponse.BodyHandlers.ofString());
+            if (logResp.statusCode() < 300) {
+                JsonNode logNode = objectMapper.readTree(logResp.body());
+                if (logNode.has("logs")) {
+                    StringBuilder sb = new StringBuilder();
+                    logNode.get("logs").forEach(line -> sb.append(line.asText()).append("\n"));
+                    run.setLogText(sb.toString());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Flink refresh error for job {}: {}", jobId, e.getMessage());
+        }
     }
 
-    private String flinkUrl(DataSourceEntity ds) {
+    private String flinkScriptUrl(DataSourceEntity ds) {
         String host = ds.getHost();
         Integer port = ds.getPort();
         if (host == null || host.isBlank()) throw new BizException(400, "Flink 数据源缺少 JobManager 地址");
-        return "http://" + host + ":" + (port != null ? port : 8081);
+        // Script server port: from extraConfig or default = port + 1
+        Integer scriptPort = null;
+        if (ds.getExtraConfig() != null && !ds.getExtraConfig().isBlank()) {
+            try {
+                var cfg = objectMapper.readTree(ds.getExtraConfig());
+                scriptPort = cfg.path("scriptServerPort").asInt(0);
+            } catch (Exception ignored) {}
+        }
+        if (scriptPort == null || scriptPort <= 0) scriptPort = (port != null ? port : 8081) + 1;
+        return "http://" + host + ":" + scriptPort;
     }
+
 }

@@ -49,21 +49,20 @@ services:
 
 
   spark:
-    image: bitnami/spark:3.5.1
+    build: ./compute/spark-rest
     container_name: Datalore-spark
     profiles: ["spark"]
-    environment:
-      SPARK_MODE: master
     ports:
-      - "18081:8080"  # Spark UI
-
+      - "18081:8998"  # mini-Livy REST
+      - "14040:4040"  # Spark UI
 
   flink:
-    image: flink:1.18
+    build: ./compute/flink-python
     container_name: Datalore-flink
     profiles: ["flink"]
     ports:
       - "18082:8081"  # Flink Web UI / REST
+      - "18083:8090"  # Script server
 
   etl-worker:
     build: ./etl-worker

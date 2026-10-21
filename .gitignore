@@ -19,3 +19,5 @@ tmp-vite.log
 deploy/etl-worker/__pycache__/
 gui-test-screenshots/
 tmp-pg*.log
+.tmp-server.log
+.tmp-web.log
