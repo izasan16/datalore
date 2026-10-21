@@ -44,6 +44,7 @@ public class AesGcmCipher {
     }
 
     public String decrypt(String enc) {
+        if (enc == null || enc.isBlank()) return null;
         try {
             byte[] all = Base64.getDecoder().decode(enc);
             Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
