@@ -66,6 +66,10 @@ public class PyScriptController {
         return service.refresh(runId);
     }
 
+    @PostMapping("/runs/{runId}/cancel")
+    public PyScriptService.RunStatus cancelRun(@PathVariable Long runId) {
+        return service.cancelRun(runId);
+    }
     @GetMapping("/runs/{runId}/logs")
     public Map<String, Object> logs(@PathVariable Long runId, @RequestParam(defaultValue = "0") int offset) {
         String logs = service.logs(runId, offset);

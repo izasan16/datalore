@@ -201,6 +201,21 @@ public class PyScriptService {
         return text.substring(offset);
     }
 
+    /** 取消运行中的脚本：调远端取消接口，成功后本地状态置为 CANCELED。 */
+    public RunStatus cancelRun(Long runId) {
+        PyscriptRunEntity run = getRun(runId);
+        if (!"RUNNING".equals(run.getStatus()) && !"QUEUED".equals(run.getStatus())) {
+            throw new BizException(400, "运行已结束，无法取消");
+        }
+        DataSourceEntity ds = requireOwnedDatasource(run.getDatasourceId());
+        executor.cancel(run, ds);
+        run.setStatus("CANCELED");
+        run.setFinishedAt(java.time.LocalDateTime.now());
+        runMapper.updateById(run);
+        return new RunStatus(run.getId(), run.getStatus(), run.getError(),
+                run.getStartedAt() == null ? "" : run.getStartedAt().toString(),
+                run.getFinishedAt() == null ? "" : run.getFinishedAt().toString());
+    }
     public record RunHistoryItem(long id, String status, String startedAt, String finishedAt) {}
 
     public List<RunHistoryItem> history(Long scriptId) {

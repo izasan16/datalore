@@ -24,7 +24,11 @@ export function runSql(datasourceId: number | undefined, sql: string) {
   return http.post<QueryResult>('/sql/run', {
     datasourceId: datasourceId == null ? undefined : String(datasourceId),
     sql,
-  }).then((r) => r.data);
+  }, { timeout: 0 }).then((r) => r.data);
+}
+
+export function cancelSql() {
+  return http.post('/sql/cancel').then((r) => r.data);
 }
 
 export function listScripts() {

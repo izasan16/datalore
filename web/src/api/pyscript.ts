@@ -72,6 +72,10 @@ export function refreshRun(runId: number) {
   return http.get<RunStatus>(`/pyscript/runs/${runId}/refresh`).then(r => r.data);
 }
 
+export function cancelRun(runId: number) {
+  return http.post<RunStatus>(`/pyscript/runs/${runId}/cancel`).then(r => r.data);
+}
+
 export function getRunLogs(runId: number, offset: number) {
   return http.get<{ logs: string; offset: number }>(`/pyscript/runs/${runId}/logs`, { params: { offset } }).then(r => r.data);
 }

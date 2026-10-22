@@ -5,9 +5,9 @@ import {
   Button, Card, Input, Message, Modal, Select, Space, Spin, Table, Tag, Typography,
 } from '@arco-design/web-react';
 import {
-  IconDelete, IconDownload, IconPlayArrow, IconPlus, IconSave,
+  IconDelete, IconDownload, IconPlayArrow, IconPlus, IconSave, IconStop,
 } from '@arco-design/web-react/icon';
-import { QueryResult, SqlScriptInfo, createScript, deleteScript, getScript, listScripts, runSql, updateScript } from '../../api/sqllab';
+import { QueryResult, SqlScriptInfo, cancelSql, createScript, deleteScript, getScript, listScripts, runSql, updateScript } from '../../api/sqllab';
 import { DataSourceInfo, listDatasources } from '../../api/datasource';
 
 export default function SqlLabPage() {
@@ -332,9 +332,26 @@ export default function SqlLabPage() {
               label: `${d.name}（${d.type}）`,
             }))}
           />
-          <Button type="primary" icon={<IconPlayArrow />} loading={running} onClick={() => runRef.current()}>
-            运行 (Ctrl+Enter)
-          </Button>
+          {running ? (
+            <Button
+              type="primary"
+              status="danger"
+              icon={<IconStop />}
+              onClick={async () => {
+                try {
+                  await cancelSql();
+                } catch (e: any) {
+                  Message.info(e.response?.data?.message || '没有正在运行的查询');
+                }
+              }}
+            >
+              停止
+            </Button>
+          ) : (
+            <Button type="primary" icon={<IconPlayArrow />} onClick={() => runRef.current()}>
+              运行 (Ctrl+Enter)
+            </Button>
+          )}
           <Button icon={<IconSave />} onClick={() => saveRef.current()}>
             保存 (Ctrl+S)
           </Button>

@@ -34,6 +34,11 @@ public class ScriptExecutorService {
 
     /** Poll remote status and update run entity (status, logText, error). */
     public void refresh(PyscriptRunEntity run, DataSourceEntity ds) {
+        // 终态（含手动取消）不再被远端状态覆盖
+        if ("SUCCESS".equals(run.getStatus()) || "FAILED".equals(run.getStatus())
+                || "CANCELED".equals(run.getStatus())) {
+            return;
+        }
         try {
             if ("spark".equals(ds.getType())) refreshSpark(run, ds);
             else if ("flink".equals(ds.getType())) refreshFlink(run, ds);
@@ -42,6 +47,41 @@ public class ScriptExecutorService {
             run.setStatus("FAILED");
             run.setError("状态刷新失败: " + e.getMessage());
             run.setFinishedAt(LocalDateTime.now());
+        }
+    }
+
+    /** 取消远端作业：Spark 走 Livy DELETE /batches/{id}，Flink 走脚本服务 /cancel/{jobId}。 */
+    public void cancel(PyscriptRunEntity run, DataSourceEntity ds) {
+        String remoteId = run.getRemoteJobId();
+        if (remoteId == null || remoteId.isBlank()) {
+            throw new BizException(400, "缺少远端作业 ID，无法取消");
+        }
+        if ("spark".equals(ds.getType())) {
+            String url = livyUrl(ds) + "/batches/" + remoteId;
+            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).DELETE().build();
+            HttpResponse<String> resp = send(req, "Spark 取消失败");
+            // 404 = 批任务已结束/已被清理，视为成功（本地状态照常置为 CANCELED）
+            if (resp.statusCode() >= 300 && resp.statusCode() != 404) {
+                throw new BizException(400, "Spark 取消失败 (HTTP " + resp.statusCode() + ")");
+            }
+        } else if ("flink".equals(ds.getType())) {
+            String url = flinkScriptUrl(ds) + "/cancel/" + remoteId;
+            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).POST(HttpRequest.BodyPublishers.noBody()).build();
+            HttpResponse<String> resp = send(req, "Flink 取消失败");
+            if (resp.statusCode() >= 300 && resp.statusCode() != 404) {
+                throw new BizException(400, "Flink 取消失败 (HTTP " + resp.statusCode() + ")");
+            }
+        } else {
+            throw new BizException(400, "不支持的计算引擎类型");
+        }
+    }
+
+    private HttpResponse<String> send(HttpRequest req, String errorPrefix) {
+        try {
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            return resp;
+        } catch (Exception e) {
+            throw new BizException(400, errorPrefix + ": " + e.getMessage());
         }
     }
 
@@ -102,7 +142,12 @@ public class ScriptExecutorService {
                     run.setStatus("SUCCESS");
                     run.setFinishedAt(LocalDateTime.now());
                 }
-                case "dead", "error", "killed" -> {
+                case "killed" -> {
+                    run.setStatus("CANCELED");
+                    run.setError("Spark 作业已被取消");
+                    run.setFinishedAt(LocalDateTime.now());
+                }
+                case "dead", "error" -> {
                     run.setStatus("FAILED");
                     run.setError("Spark 作业状态: " + state);
                     run.setFinishedAt(LocalDateTime.now());
@@ -177,7 +222,12 @@ public class ScriptExecutorService {
                     run.setStatus("SUCCESS");
                     run.setFinishedAt(LocalDateTime.now());
                 }
-                case "FAILED", "CANCELED", "error" -> {
+                case "CANCELED" -> {
+                    run.setStatus("CANCELED");
+                    run.setError("Flink 作业已被取消");
+                    run.setFinishedAt(LocalDateTime.now());
+                }
+                case "FAILED", "error" -> {
                     run.setStatus("FAILED");
                     run.setError("Flink 作业状态: " + state);
                     run.setFinishedAt(LocalDateTime.now());

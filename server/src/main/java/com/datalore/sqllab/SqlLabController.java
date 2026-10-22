@@ -24,4 +24,10 @@ public class SqlLabController {
     public SqlGatewayService.QueryResult run(@RequestBody RunReq req) {
         return gateway.run(req.datasourceId(), req.sql());
     }
+
+    @PostMapping("/cancel")
+    public java.util.Map<String, Object> cancel() {
+        gateway.cancel();
+        return java.util.Map.of("ok", true);
+    }
 }

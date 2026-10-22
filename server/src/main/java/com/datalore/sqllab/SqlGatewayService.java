@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * SQL 网关：平台不代理权限管控，语句类型不限制，权限由用户数据库自身决定；
@@ -27,6 +29,11 @@ import java.util.Map;
  */
 @Service
 public class SqlGatewayService {
+
+    /** 当前用户正在执行的语句注册表，用于「停止」操作（JDBC Statement.cancel()）。 */
+    private record ActiveExec(Statement statement, AtomicBoolean cancelRequested) {}
+
+    private static final Map<String, ActiveExec> ACTIVE = new ConcurrentHashMap<>();
 
     private final ConnectionManager connectionManager;
     private final DataSourceService dataSourceService;
@@ -59,39 +66,65 @@ public class SqlGatewayService {
         DataSource pool = connectionManager.pool(ds, cipher.decrypt(ds.getPasswordEnc()));
 
         long t0 = System.currentTimeMillis();
+        AtomicBoolean cancelRequested = new AtomicBoolean(false);
         try (Connection conn = pool.getConnection(); Statement st = conn.createStatement()) {
             st.setQueryTimeout(maxSeconds);
             st.setMaxRows(maxRows + 1);
+            ActiveExec exec = new ActiveExec(st, cancelRequested);
+            ACTIVE.put(execKey(), exec);
             boolean hasRs = st.execute(sql);
-            long elapsed = System.currentTimeMillis() - t0;
-            if (hasRs) {
-                try (ResultSet rs = st.getResultSet()) {
-                    ResultSetMetaData md = rs.getMetaData();
-                    int cols = md.getColumnCount();
-                    List<String> columns = new ArrayList<>();
-                    for (int i = 1; i <= cols; i++) columns.add(md.getColumnLabel(i));
-                    List<List<String>> rows = new ArrayList<>();
-                    boolean truncated = false;
-                    while (rs.next()) {
-                        if (rows.size() >= maxRows) {
-                            truncated = true;
-                            break;
+            try {
+                long elapsed = System.currentTimeMillis() - t0;
+                if (hasRs) {
+                    try (ResultSet rs = st.getResultSet()) {
+                        ResultSetMetaData md = rs.getMetaData();
+                        int cols = md.getColumnCount();
+                        List<String> columns = new ArrayList<>();
+                        for (int i = 1; i <= cols; i++) columns.add(md.getColumnLabel(i));
+                        List<List<String>> rows = new ArrayList<>();
+                        boolean truncated = false;
+                        while (rs.next()) {
+                            if (rows.size() >= maxRows) {
+                                truncated = true;
+                                break;
+                            }
+                            List<String> row = new ArrayList<>(cols);
+                            for (int i = 1; i <= cols; i++) row.add(rs.getString(i));
+                            rows.add(row);
                         }
-                        List<String> row = new ArrayList<>(cols);
-                        for (int i = 1; i <= cols; i++) row.add(rs.getString(i));
-                        rows.add(row);
+                        return new QueryResult(columns, rows, truncated, rows.size(), elapsed, true, 0);
                     }
-                    return new QueryResult(columns, rows, truncated, rows.size(), elapsed, true, 0);
                 }
+                return new QueryResult(List.of(), List.of(), false, 0, elapsed, false, st.getUpdateCount());
+            } finally {
+                ACTIVE.remove(execKey(), exec);
             }
-            return new QueryResult(List.of(), List.of(), false, 0, elapsed, false, st.getUpdateCount());
         } catch (SQLException e) {
+            if (cancelRequested.get()) throw new BizException(400, "查询已被手动取消");
             String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             if (msg.toLowerCase(Locale.ROOT).contains("cancel")) {
                 throw new BizException(400, "查询超时（超过 " + maxSeconds + " 秒）已取消");
             }
             throw new BizException(400, msg);
         }
+    }
+
+    /** 中断当前用户正在执行的查询。 */
+    public void cancel() {
+        String key = execKey();
+        ActiveExec exec = ACTIVE.remove(key);
+        if (exec == null) throw new BizException(400, "没有正在运行的查询");
+        exec.cancelRequested().set(true);
+        try {
+            exec.statement().cancel();
+        } catch (SQLException e) {
+            throw new BizException(400, "取消失败: " + e.getMessage());
+        }
+    }
+
+    private static String execKey() {
+        TenantContext.Ctx c = TenantContext.get();
+        return c == null ? "anonymous" : c.tenantId() + ":" + c.userId();
     }
 
     private DataSourceEntity resolveTarget(String datasourceIdStr) {

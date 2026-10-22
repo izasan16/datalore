@@ -5,12 +5,12 @@ import {
   Button, Card, Input, Message, Modal, Select, Space, Spin, Tag, Typography, Tree,
 } from '@arco-design/web-react';
 import {
-  IconDelete, IconPlayArrow, IconPlus, IconSave, IconFile,
+  IconDelete, IconPlayArrow, IconPlus, IconSave, IconFile, IconStop,
 } from '@arco-design/web-react/icon';
 import {
   ScriptInfo, ScriptDetail, RunStatus, RunHistoryItem, HdfsEntry,
   listScripts, getScript, createScript, updateScript, deleteScript,
-  runScript, runAdhoc, refreshRun, getRunLogs, runHistory, listHdfs,
+  runScript, runAdhoc, refreshRun, cancelRun, getRunLogs, runHistory, listHdfs,
 } from '../../api/pyscript';
 import { DataSourceInfo, listDatasources } from '../../api/datasource';
 
@@ -44,6 +44,7 @@ const { Text } = Typography;
 function StatusTag({ status }: { status: string }) {
   const map: Record<string, { color: string; text: string }> = {
     QUEUED: { color: 'gray', text: '排队中' },
+    CANCELED: { color: 'orange', text: '已取消' },
     RUNNING: { color: 'blue', text: '运行中' },
     SUCCESS: { color: 'green', text: '成功' },
     FAILED: { color: 'red', text: '失败' },
@@ -133,7 +134,7 @@ export default function PyScriptPage() {
           setRunLogs((prev) => prev + logs.logs);
           if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
         }
-        if (status.status === 'SUCCESS' || status.status === 'FAILED') {
+        if (status.status === 'SUCCESS' || status.status === 'FAILED' || status.status === 'CANCELED') {
           if (pollRef.current) clearInterval(pollRef.current);
           // 终态时再拉一次日志，防止并发查询拿到空结果
           try {
@@ -393,9 +394,29 @@ export default function PyScriptPage() {
               options={computeDs.map((d) => ({ value: d.id, label: `${d.name}（${d.type === 'spark' ? 'Spark' : 'Flink'}）` }))}
               disabled={currentId != null && detail != null}
             />
-            <Button type="primary" icon={<IconPlayArrow />} loading={running} disabled={!currentDs} onClick={handleRun}>
-              运行
-            </Button>
+            {running && runStatus && (runStatus.status === 'RUNNING' || runStatus.status === 'QUEUED') ? (
+              <Button
+                type="primary"
+                status="danger"
+                icon={<IconStop />}
+                onClick={async () => {
+                  if (!runStatus) return;
+                  try {
+                    const st = await cancelRun(runStatus.runId);
+                    setRunStatus(st);
+                    Message.success('已发送停止请求');
+                  } catch (e: any) {
+                    Message.info(e?.response?.data?.message ?? '无法取消');
+                  }
+                }}
+              >
+                停止
+              </Button>
+            ) : (
+              <Button type="primary" icon={<IconPlayArrow />} loading={running} disabled={!currentDs} onClick={handleRun}>
+                运行
+              </Button>
+            )}
             <Button icon={<IconSave />} loading={saving} onClick={handleSave}>
               保存
             </Button>
