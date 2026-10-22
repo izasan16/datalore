@@ -21,3 +21,13 @@ gui-test-screenshots/
 tmp-pg*.log
 .tmp-server.log
 .tmp-web.log
+.tmp-e2e/
+
+# 本地调试与临时文件
+.tmp-*
+web/.tmp-*
+*.dump
+*.zip
+
+# 构建产物（release 镜像包体积过大，不入库）
+deploy/release/*.tar

@@ -8,6 +8,8 @@ import com.datalore.common.security.AesGcmCipher;
 import com.datalore.datasource.entity.DataSourceEntity;
 import com.datalore.datasource.mapper.DataSourceMapper;
 import com.datalore.datasource.service.ConnectionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
@@ -37,6 +39,7 @@ import java.util.stream.Collectors;
  */
 @Service
 public class OpenApiService {
+    private static final Logger log = LoggerFactory.getLogger(OpenApiService.class);
 
     public record OpenResult(List<String> columns, List<List<String>> rows, long total, int page, int size) {}
 
@@ -193,6 +196,7 @@ public class OpenApiService {
         } catch (OpenApiException e) {
             throw e;
         } catch (Exception e) {
+            log.error("OpenAPI 查询执行失败", e);
             throw new OpenApiException(500, "查询执行失败");
         }
     }
@@ -275,6 +279,7 @@ public class OpenApiService {
         } catch (OpenApiException e) {
             throw e;
         } catch (Exception e) {
+            log.error("OpenAPI 查询执行失败", e);
             throw new OpenApiException(500, "查询执行失败");
         }
     }
