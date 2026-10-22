@@ -31,3 +31,7 @@ web/.tmp-*
 
 # 构建产物（release 镜像包体积过大，不入库）
 deploy/release/*.tar
+
+# 根目录垃圾隔离（Playwright 快照误入防御）
+/*.yml
+*.log
