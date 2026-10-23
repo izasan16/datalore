@@ -14,7 +14,10 @@ import {
 } from '../../api/pyscript';
 import { DataSourceInfo, listDatasources } from '../../api/datasource';
 
-const SPARK_TEMPLATE = `# spark 变量已由平台注入，直接使用
+const SPARK_TEMPLATE = `from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("datalore").getOrCreate()
+
 result = spark.sql("SELECT 1 AS hello")
 result.show()
 

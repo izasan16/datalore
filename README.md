@@ -8,8 +8,8 @@
 
 - **数据源管理** — 支持 PostgreSQL / MySQL / Hive 关系型数据源与 Spark / Flink 计算引擎登记，按类型动态适配连接表单，测连接 / 编辑 / 删除
 - **数据管理** — 数据源 → Schema → 表树形浏览；表数据分页预览、条件筛选、排序、新增行、删除行、导出 CSV；字段结构查看与 DDL 编辑（新增 / 改名 / 改类型 / 删除，按数据源方言生成）；CSV 导入（自定义物理表名 / 追加已有表）；所有表支持引用检查 + 强制删除
-- **SQL 分析** — Monaco 编辑器，脚本树管理、只读校验、30s 超时、10000 行截断、结果导出 CSV，支持 PG / MySQL / Hive
-- **Python 分析** — PySpark 脚本经 Livy 兼容 REST API 提交到 Spark 集群真实执行；PyFlink 脚本经 Flink 集群 REST API 执行；实时日志输出与运行历史
+- **SQL 分析** — Monaco 编辑器，数据库客户端式多页签（临时页签可保存、双击改名、未保存内容本地持久化），多页签并发运行与逐页签停止，30s 超时、10000 行截断、结果导出 CSV，支持 PG / MySQL / Hive
+- **Python 分析** — 多页签编辑器（与 SQL 分析一致），PySpark 经 Livy 兼容 REST API、PyFlink 经 Flink 集群 REST API 真实执行；页签间并发运行、独立日志、单页签停止，实时输出与运行历史
 - **API 发布** — 数据表模式（选表 + 暴露列 + 过滤列）与 SQL 模式（手写只读 SELECT，支持 `:param` 命名参数）；每个 API 独立 Key/Secret 凭证，AES-GCM 加密存储
 - **数据集成** — 4 步向导：基本信息 → 源与目标 → 映射配置（拖拽连线字段映射）→ 调度与确认；支持 OVERWRITE / APPEND / UPSERT 写入策略与 SELECT 表输入
 - **多租户** — 租户注册、登录鉴权、数据与脚本按租户隔离
