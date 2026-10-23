@@ -55,7 +55,7 @@ public class SqlGatewayService {
     public record QueryResult(List<String> columns, List<List<String>> rows, boolean truncated,
                               int rowCount, long elapsedMs, boolean isQuery, int affectedRows) {}
 
-    public QueryResult run(String datasourceIdStr, String sql) {
+    public QueryResult run(String datasourceIdStr, String sql, String runToken) {
         if (sql == null || sql.isBlank()) throw new BizException(400, "SQL 不能为空");
         String normalized = SqlScanner.normalize(sql);
         if (normalized.isBlank()) throw new BizException(400, "SQL 不能为空");
@@ -71,7 +71,7 @@ public class SqlGatewayService {
             st.setQueryTimeout(maxSeconds);
             st.setMaxRows(maxRows + 1);
             ActiveExec exec = new ActiveExec(st, cancelRequested);
-            ACTIVE.put(execKey(), exec);
+            ACTIVE.put(execKey(runToken), exec);
             boolean hasRs = st.execute(sql);
             try {
                 long elapsed = System.currentTimeMillis() - t0;
@@ -97,7 +97,7 @@ public class SqlGatewayService {
                 }
                 return new QueryResult(List.of(), List.of(), false, 0, elapsed, false, st.getUpdateCount());
             } finally {
-                ACTIVE.remove(execKey(), exec);
+                ACTIVE.remove(execKey(runToken), exec);
             }
         } catch (SQLException e) {
             if (cancelRequested.get()) throw new BizException(400, "查询已被手动取消");
@@ -109,9 +109,19 @@ public class SqlGatewayService {
         }
     }
 
-    /** 中断当前用户正在执行的查询。 */
-    public void cancel() {
-        String key = execKey();
+    /** 中断当前用户的查询：带 runToken 定向取消，不带则取消全部活跃查询。 */
+    public void cancel(String runToken) {
+        String user = execKey();
+        if (runToken != null && !runToken.isBlank()) {
+            cancelOne(user + ":" + runToken.trim());
+            return;
+        }
+        java.util.List<String> keys = ACTIVE.keySet().stream().filter(k -> k.startsWith(user + ":")).toList();
+        if (keys.isEmpty()) throw new BizException(400, "没有正在运行的查询");
+        keys.forEach(this::cancelOne);
+    }
+
+    private void cancelOne(String key) {
         ActiveExec exec = ACTIVE.remove(key);
         if (exec == null) throw new BizException(400, "没有正在运行的查询");
         exec.cancelRequested().set(true);
@@ -120,6 +130,9 @@ public class SqlGatewayService {
         } catch (SQLException e) {
             throw new BizException(400, "取消失败: " + e.getMessage());
         }
+    }
+    private static String execKey(String runToken) {
+        return execKey() + ":" + (runToken == null || runToken.isBlank() ? "default" : runToken.trim());
     }
 
     private static String execKey() {

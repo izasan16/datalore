@@ -20,15 +20,16 @@ export interface SqlScriptDetail extends SqlScriptInfo {
   content: string;
 }
 
-export function runSql(datasourceId: number | undefined, sql: string) {
+export function runSql(datasourceId: number | undefined, sql: string, runToken?: string) {
   return http.post<QueryResult>('/sql/run', {
     datasourceId: datasourceId == null ? undefined : String(datasourceId),
     sql,
+    runToken,
   }, { timeout: 0 }).then((r) => r.data);
 }
 
-export function cancelSql() {
-  return http.post('/sql/cancel').then((r) => r.data);
+export function cancelSql(runToken?: string) {
+  return http.post('/sql/cancel', runToken ? { runToken } : undefined).then((r) => r.data);
 }
 
 export function listScripts() {

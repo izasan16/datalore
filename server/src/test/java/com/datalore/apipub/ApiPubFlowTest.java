@@ -40,9 +40,9 @@ class ApiPubFlowTest {
         var source = dataSourceService.create("API-PG-" + slug, "postgresql", "localhost", 15432,
                 "datalore", "public", "datalore", "datalore_dev_2026", null);
         String table = "t_open_" + slug;
-        gateway.run(String.valueOf(source.getId()), "CREATE TABLE " + table + "(id bigint, name text, city text)");
+        gateway.run(String.valueOf(source.getId()), "CREATE TABLE " + table + "(id bigint, name text, city text)", null);
         gateway.run(String.valueOf(source.getId()),
-                "INSERT INTO " + table + " VALUES (1,'Ann','SH'),(2,'Bob','BJ'),(3,'Cid','SH')");
+                "INSERT INTO " + table + " VALUES (1,'Ann','SH'),(2,'Bob','BJ'),(3,'Cid','SH')", null);
         return new Setup(source.getId(), table);
     }
 

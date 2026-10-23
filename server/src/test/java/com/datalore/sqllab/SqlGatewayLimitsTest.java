@@ -33,7 +33,7 @@ class SqlGatewayLimitsTest {
     @Test
     void truncatesAtMaxRows() {
         String ds = setupTenant();
-        var r = gateway.run(ds, "SELECT generate_series(1, 100) AS n");
+        var r = gateway.run(ds, "SELECT generate_series(1, 100) AS n", null);
         assertThat(r.rows()).hasSize(5);
         assertThat(r.truncated()).isTrue();
     }
@@ -42,7 +42,7 @@ class SqlGatewayLimitsTest {
     void killsSlowQuery() {
         String ds = setupTenant();
         assertThatThrownBy(() -> gateway.run(ds,
-                "SELECT sum(g) FROM generate_series(1, 200000000) g"))
+                "SELECT sum(g) FROM generate_series(1, 200000000) g", null))
                 .isInstanceOf(com.datalore.common.exception.BizException.class)
                 .hasMessageContaining("超时");
     }

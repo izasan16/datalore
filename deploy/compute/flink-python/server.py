@@ -44,6 +44,16 @@ def submit():
             break
         time.sleep(0.5)
     if not job_id:
+        # Bounded batch PyFlink jobs can finish before the client prints a JobID.
+        # If `flink run` exited cleanly, treat it as an already-finished run.
+        import time
+        exit_deadline = time.time() + 30
+        while proc.poll() is None and time.time() < exit_deadline:
+            time.sleep(0.5)
+        if proc.poll() == 0:
+            job_id = "local-" + sid
+            runs[job_id] = {"script": script, "log": log, "proc": proc}
+            return jsonify({"jobId": job_id}), 201
         if proc.poll() is None:
             proc.kill()
         tail = ""

@@ -18,16 +18,17 @@ public class SqlLabController {
         this.gateway = gateway;
     }
 
-    public record RunReq(String datasourceId, @NotBlank String sql) {}
+    public record RunReq(String datasourceId, @NotBlank String sql, String runToken) {}
 
     @PostMapping("/run")
     public SqlGatewayService.QueryResult run(@RequestBody RunReq req) {
-        return gateway.run(req.datasourceId(), req.sql());
+        return gateway.run(req.datasourceId(), req.sql(), req.runToken());
     }
 
     @PostMapping("/cancel")
-    public java.util.Map<String, Object> cancel() {
-        gateway.cancel();
+    public java.util.Map<String, Object> cancel(@RequestBody(required = false) java.util.Map<String, String> body) {
+        String runToken = body == null ? null : body.get("runToken");
+        gateway.cancel(runToken);
         return java.util.Map.of("ok", true);
     }
 }
