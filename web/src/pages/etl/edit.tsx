@@ -5,7 +5,7 @@ import {
   createEtlTask, EtlTask, getEtlTask, parseEtlDdl, ParsedDdl, updateEtlTask,
 } from '../../api/etl';
 import {
-  ColumnInfo, DataSourceInfo, listColumns, listDatasources, listSchemas, listTables,
+  ColumnInfo, DataSourceInfo, listColumns, isRelationalDs, listDatasources, listSchemas, listTables,
 } from '../../api/datasource';
 import { runSql } from '../../api/sqllab';
 import FieldMappingPanel, { FieldCol, FieldPair } from './FieldMapping';
@@ -58,7 +58,7 @@ export default function EtlEditPage() {
   const taskId = editing ? Number(id) : task?.id;
 
   useEffect(() => {
-    listDatasources().then(setSources).catch(() => Message.error('数据源加载失败'));
+    listDatasources().then((l) => setSources(l.filter((d) => isRelationalDs(d.type)))).catch(() => Message.error('数据源加载失败'));
     if (id) {
       getEtlTask(Number(id)).then(async (loaded) => {
         setTask(loaded);

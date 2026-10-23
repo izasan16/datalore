@@ -3,7 +3,7 @@ import {
   Button, Checkbox, Form, Grid, Input, InputNumber, Message, Radio, Select, Switch, Table, Typography,
 } from '@arco-design/web-react';
 import { ApiParamDef, ApiPubInfo, ApiPubPayload, ApiSourceType } from '../../api/apipub';
-import { ColumnInfo, listColumns, listDatasources, listSchemas, listTables } from '../../api/datasource';
+import { ColumnInfo, listColumns, isRelationalDs, listDatasources, listSchemas, listTables } from '../../api/datasource';
 
 const { Row, Col } = Grid;
 const CheckboxGroup = Checkbox.Group;
@@ -76,7 +76,7 @@ export default function ApiPubForm({
     setDsError(false);
     try {
       const list = await listDatasources();
-      setDsList(list.map((d) => ({ id: d.id, name: d.name, type: d.type })));
+      setDsList(list.filter((d) => isRelationalDs(d.type)).map((d) => ({ id: d.id, name: d.name, type: d.type })));
     } catch {
       setDsError(true);
     } finally {

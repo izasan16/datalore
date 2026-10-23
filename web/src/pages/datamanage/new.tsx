@@ -5,7 +5,7 @@ import {
 } from '@arco-design/web-react';
 import { IconArrowRise, IconUpload } from '@arco-design/web-react/icon';
 import { confirmImported, uploadImported } from '../../api/imported';
-import { ColumnInfo, listDatasources, listSchemas, listTables } from '../../api/datasource';
+import { ColumnInfo, isRelationalDs, listDatasources, listSchemas, listTables } from '../../api/datasource';
 
 const { Row, Col } = Grid;
 
@@ -316,7 +316,7 @@ function LocationStep({
     setDsLoading(true);
     listDatasources()
       .then((list) => {
-        setDsList(list.map((d) => ({ label: `${d.name}（${d.type}）`, value: d.id })));
+        setDsList(list.filter((d) => isRelationalDs(d.type)).map((d) => ({ label: `${d.name}（${d.type}）`, value: d.id })));
         setDsError(false);
       })
       .catch(() => setDsError(true))

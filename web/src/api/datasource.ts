@@ -172,6 +172,17 @@ export function deleteTable(id: number, schema: string | undefined, table: strin
   return http.delete(`/datasources/${id}/tables`, { params }).then((r) => r.data);
 }
 
+/** 关系型数据源：SQL 分析 / 数据管理 / CSV 导入 / API 发布 / ETL 源目标仅支持这些类型 */
+export const RELATIONAL_TYPES = ['postgresql', 'mysql', 'hive'] as const;
+
+export function isRelationalDs(type: string): boolean {
+  return (RELATIONAL_TYPES as readonly string[]).includes(type);
+}
+
+/** 计算引擎数据源：仅用于 Python 分析 */
+export function isComputeDs(type: string): boolean {
+  return type === 'spark' || type === 'flink';
+}
 export const STD_COLUMN_TYPES = [
   { label: 'bigint（整数）', value: 'bigint' },
   { label: 'numeric（数值）', value: 'numeric' },

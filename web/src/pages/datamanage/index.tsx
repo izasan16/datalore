@@ -7,7 +7,7 @@ import { IconDelete, IconDownload, IconPlus, IconRefresh, IconSearch } from '@ar
 import {
   alterColumn, batchColumns, ColumnChange, ColumnInfo, columnTypes, ColumnTypeDef, DataSourceInfo,
   deleteRows, exportRows, FILTER_OPS, insertRow,
-  listColumns, listDatasources, listRows, listSchemas, listTables,
+  listColumns, isRelationalDs, listDatasources, listRows, listSchemas, listTables,
   TableFilter, TableRef, TableRowsResult, tableRefs, deleteTable,
 } from '../../api/datasource';
 import { ImportedTableInfo, listImported } from '../../api/imported';
@@ -73,7 +73,7 @@ export default function DataManagePage() {
 
   const loadDatasources = useCallback(async () => {
     try {
-      setDsList(await listDatasources());
+      setDsList((await listDatasources()).filter((d) => isRelationalDs(d.type)));
       setDatasourceError(false);
     } catch (e: any) {
       setDatasourceError(true);

@@ -8,7 +8,7 @@ import {
   IconDelete, IconDownload, IconPlayArrow, IconPlus, IconSave, IconStop,
 } from '@arco-design/web-react/icon';
 import { QueryResult, SqlScriptInfo, cancelSql, createScript, deleteScript, getScript, listScripts, runSql, updateScript } from '../../api/sqllab';
-import { DataSourceInfo, listDatasources } from '../../api/datasource';
+import { DataSourceInfo, isRelationalDs, listDatasources } from '../../api/datasource';
 
 export default function SqlLabPage() {
   const [scripts, setScripts] = useState<SqlScriptInfo[]>([]);
@@ -67,7 +67,7 @@ export default function SqlLabPage() {
     setDatasourcesError(false);
     try {
       const list = await listDatasources();
-      setDsList(list);
+      setDsList(list.filter((d) => isRelationalDs(d.type)));
     } catch {
       setDatasourcesError(true);
     } finally {
