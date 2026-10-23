@@ -1,18 +1,23 @@
 # 数据开发平台 - 离线部署（本地构建镜像，服务器不联公网）
-# 使用: docker compose -f docker-compose.release.yml up -d
+# 使用: docker-compose -f docker-compose.release.yml up -d
+#
+# 兼容说明：本文件兼容早期 daaspro 命名时代的存量部署——
+# - 数据卷沿用（pgdata 内数据库用户为 daaspro，不迁移）
+# - .env 沿用 DAASPRO_* 变量名，容器内以 DATALORE_* 注入
+# - 镜像名与容器名已改为 datalore/*
 
 services:
   postgres:
     image: postgres:16
-    container_name: Datalore-postgres
+    container_name: datalore-postgres
     environment:
-      POSTGRES_DB: Datalore
-      POSTGRES_USER: Datalore
+      POSTGRES_DB: daaspro
+      POSTGRES_USER: daaspro
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U Datalore"]
+      test: ["CMD-SHELL", "pg_isready -U daaspro"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,54 +25,54 @@ services:
 
   redis:
     image: redis:7
-    container_name: Datalore-redis
+    container_name: datalore-redis
     volumes:
       - redisdata:/data
     restart: unless-stopped
 
   minio:
     image: minio/minio
-    container_name: Datalore-minio
+    container_name: datalore-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-Datalore}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-daaspro}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env 中设置}
     volumes:
       - miniodata:/data
     restart: unless-stopped
 
   etl-worker:
-    image: Datalore/etl-worker:latest
-    container_name: Datalore-etl-worker
+    image: datalore/etl-worker:latest
+    container_name: datalore-etl-worker
     environment:
-      Datalore_WORKER_TOKEN: ${Datalore_ETL_WORKER_TOKEN:?请在 .env 中设置}
-      Datalore_WORKER_PORT: "8090"
-      Datalore_WORKER_GATEWAY_REWRITE: "0"
+      DATALORE_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN:?请在 .env 中设置}
+      DATALORE_WORKER_PORT: "8090"
+      DATALORE_WORKER_GATEWAY_REWRITE: "0"
     restart: unless-stopped
 
   server:
-    image: Datalore/server:latest
-    container_name: Datalore-server
+    image: datalore/server:latest
+    container_name: datalore-server
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/Datalore
-      SPRING_DATASOURCE_USERNAME: Datalore
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/daaspro
+      SPRING_DATASOURCE_USERNAME: daaspro
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
-      Datalore_MINIO_ENDPOINT: http://minio:9000
-      Datalore_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-Datalore}
-      Datalore_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      Datalore_ETL_WORKER_URL: http://etl-worker:8090
-      Datalore_ETL_WORKER_TOKEN: ${Datalore_ETL_WORKER_TOKEN}
-      Datalore_CRYPTO_KEY: ${Datalore_CRYPTO_KEY:?请在 .env 中设置}
+      DATALORE_MINIO_ENDPOINT: http://minio:9000
+      DATALORE_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-daaspro}
+      DATALORE_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      DATALORE_ETL_WORKER_URL: http://etl-worker:8090
+      DATALORE_ETL_WORKER_TOKEN: ${DAASPRO_ETL_WORKER_TOKEN}
+      DATALORE_CRYPTO_KEY: ${DAASPRO_CRYPTO_KEY:?请在 .env 中设置}
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
 
   web:
-    image: Datalore/web:latest
-    container_name: Datalore-web
+    image: datalore/web:latest
+    container_name: datalore-web
     ports:
       - "${WEB_PORT:-80}:80"
     depends_on:
